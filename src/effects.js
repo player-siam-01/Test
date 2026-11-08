@@ -27,8 +27,10 @@ export class Particles {
         scale: { value: 600 } },
       vertexShader: `attribute float size; attribute float alpha; attribute vec3 color;
         varying float vA; varying vec3 vC; uniform float scale;
-        void main(){ vA = alpha; vC = color; vec4 mv = modelViewMatrix * vec4(position,1.);
-          gl_PointSize = size * scale / max(0.1, -mv.z); gl_Position = projectionMatrix * mv; }`,
+        void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.);
+          // fade out particles right in front of the lens and cap their on-screen size
+          vA = alpha * smoothstep(2.5, 9.0, -mv.z);
+          gl_PointSize = min(size * scale / max(0.1, -mv.z), scale * 0.18); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform sampler2D map; varying float vA; varying vec3 vC;
         void main(){ vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC, t.a * vA); if (gl_FragColor.a < 0.01) discard; }`,
     });

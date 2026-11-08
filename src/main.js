@@ -407,7 +407,7 @@ function carEffects(car, view, dt) {
       acc += dt * (burn ? 40 : Math.min(45, car.drift * 4));
       while (acc > 1) {
         acc -= 1;
-        const g = 0.55 + Math.random() * 0.2;
+        const g = 0.42 + Math.random() * 0.16;
         smoke.emit(wx, 0.35, wz, (Math.random() - 0.5) * 2 + car.vx * 0.15, 0.8 + Math.random(), (Math.random() - 0.5) * 2 + car.vz * 0.15,
           1.1 + Math.random() * 0.8, 1.1, g, g, g * 1.08);
       }
