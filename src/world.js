@@ -1,6 +1,7 @@
 // Builds the 3D environment: sky, lighting, track surfaces, barriers, scenery.
 import * as THREE from 'three';
 import { ROAD_HALF, CURB_WIDTH, WALL_DIST, nearestIndex, wrap } from './track.js';
+import { asphaltMaps, grassMaps, concreteMaps } from './textures.js';
 
 export const SUN_DIR = new THREE.Vector3(0.22, 0.09, 1).normalize();
 
@@ -130,20 +131,33 @@ export function buildWorld(scene, renderer, track) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envScene = new THREE.Scene();
   envScene.add(makeSky());
+  // studio-style light panels so glossy paint gets crisp highlights
+  const panel = (w, h, col, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide }));
+    m.position.set(x, y, z); m.lookAt(0, 0, 0); envScene.add(m);
+  };
+  panel(60, 14, new THREE.Color(3.2, 3.0, 2.8), 0, 60, 0);
+  panel(80, 6, new THREE.Color(0.2, 2.2, 3), -70, 8, 10);
+  panel(80, 6, new THREE.Color(3, 0.4, 2.4), 70, 8, -10);
+  panel(40, 10, new THREE.Color(3, 1.6, 0.8), 0, 12, 80);
+  const envGround = new THREE.Mesh(new THREE.CircleGeometry(400, 32), new THREE.MeshBasicMaterial({ color: 0x120814 }));
+  envGround.rotation.x = -Math.PI / 2; envGround.position.y = -2;
+  envScene.add(envGround);
   const envRT = pmrem.fromScene(envScene, 0.02);
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.9;
+  scene.environmentIntensity = 1.0;
   pmrem.dispose();
 
   scene.fog = new THREE.Fog(0x4a1a4a, 140, 1600);
 
-  const hemi = new THREE.HemisphereLight(0x8a7cff, 0x2a0f22, 0.9);
+  const hemi = new THREE.HemisphereLight(0x9d8cff, 0x3a1a2a, 1.35);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xffb48a, 2.6);
+  const sun = new THREE.DirectionalLight(0xffb98f, 3.4);
   sun.position.copy(SUN_DIR).multiplyScalar(150);
   sun.castShadow = true;
   {
     sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.radius = 3;
     const c = sun.shadow.camera;
     c.left = -70; c.right = 70; c.top = 70; c.bottom = -70; c.near = 1; c.far = 400;
     sun.shadow.bias = -0.0004;
@@ -152,42 +166,20 @@ export function buildWorld(scene, renderer, track) {
   scene.add(sun, sun.target);
 
   // Ground
-  const groundTex = canvasTexture(512, 512, (g, w, h) => {
-    g.fillStyle = '#16301f'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 9000; i++) {
-      const v = R();
-      g.fillStyle = v > 0.5 ? `rgba(40,80,45,${R() * 0.5})` : `rgba(8,20,12,${R() * 0.5})`;
-      g.fillRect(R() * w, R() * h, 2 + R() * 3, 2 + R() * 3);
-    }
-  }, { repeat: [220, 220] });
+  const grass = grassMaps(512);
+  for (const t of [grass.map, grass.normalMap]) t.repeat.set(260, 260);
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(4000, 4000),
-    new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95, metalness: 0 }));
+    new THREE.MeshStandardMaterial({ map: grass.map, normalMap: grass.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.92, metalness: 0 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
 
   // Asphalt
-  const roadTex = canvasTexture(512, 1024, (g, w, h) => {
-    g.fillStyle = '#26262c'; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 26000; i++) {
-      const c = 25 + R() * 40;
-      g.fillStyle = `rgba(${c},${c},${c + 6},${0.35 + R() * 0.5})`;
-      g.fillRect(R() * w, R() * h, 1 + R() * 2, 1 + R() * 2);
-    }
-    // tyre-worn racing groove
-    const gr = g.createLinearGradient(0, 0, w, 0);
-    gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.4, 'rgba(0,0,0,0.22)');
-    gr.addColorStop(0.6, 'rgba(0,0,0,0.22)'); gr.addColorStop(0.75, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#e8e8e8';
-    g.fillRect(w * 0.035, 0, w * 0.022, h);
-    g.fillRect(w * 0.943, 0, w * 0.022, h);
-    g.fillStyle = '#f2c230';
-    g.fillRect(w * 0.492, 0, w * 0.016, h * 0.45);
-  }, { repeat: [1, 1] });
+  const asphalt = asphaltMaps(1024);
   const road = new THREE.Mesh(ribbon(track, -ROAD_HALF, ROAD_HALF, 0.02, 18),
-    new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.62, metalness: 0.15, envMapIntensity: 0.6 }));
+    new THREE.MeshStandardMaterial({ map: asphalt.map, normalMap: asphalt.normalMap, normalScale: new THREE.Vector2(0.6, 0.6),
+      roughnessMap: asphalt.roughnessMap, roughness: 1, metalness: 0.05, envMapIntensity: 1.1 }));
   road.receiveShadow = true;
   scene.add(road);
 
@@ -216,18 +208,32 @@ export function buildWorld(scene, renderer, track) {
   }
 
   // Barriers with neon tubes
-  const wallTex = canvasTexture(256, 64, (g, w, h) => {
-    g.fillStyle = '#1b1b26'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#2c2c3e';
-    for (let x = 0; x < w; x += 32) g.fillRect(x, 0, 16, h);
-    g.fillStyle = '#ddd'; g.fillRect(0, h * 0.42, w, h * 0.08);
+  const conc = concreteMaps(256);
+  const BRANDS = [['VOLTRA', '#22e0ff'], ['NOVA FUEL', '#ffd21f'], ['HYPERION', '#ff2bd6'], ['ZENITH TYRES', '#ffffff']];
+  const wallTex = canvasTexture(2048, 128, (g, w, h) => {
+    g.drawImage(conc.map.image, 0, 0, w / 4, h); g.drawImage(conc.map.image, w / 4, 0, w / 4, h);
+    g.drawImage(conc.map.image, w / 2, 0, w / 4, h); g.drawImage(conc.map.image, w * 0.75, 0, w / 4, h);
+    BRANDS.forEach(([name, col], k) => {
+      const x0 = k * w / 4 + 16, bw = w / 4 - 32;
+      g.fillStyle = '#0b0a14'; g.fillRect(x0, 18, bw, 70);
+      g.fillStyle = col; g.fillRect(x0, 82, bw, 6);
+      // texels are ~2x wider than tall on the wall, so pre-squash the lettering
+      g.save(); g.translate(x0 + bw / 2, 52); g.scale(0.52, 1);
+      g.font = 'italic 900 54px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = col; g.shadowBlur = 10;
+      g.fillStyle = col; g.fillText(name, 0, 0); g.restore();
+    });
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, h - 14, w, 14);
   });
-  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.45, metalness: 0.6, side: THREE.DoubleSide });
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide });
+  // the right-hand wall is seen from the other side: mirror its UVs so the lettering reads correctly
+  const wallTexR = wallTex.clone(); wallTexR.repeat.x = -1; wallTexR.needsUpdate = true;
+  const wallMatR = wallMat.clone(); wallMatR.map = wallTexR;
   const neonL = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x24e8ff).multiplyScalar(4), toneMapped: false });
   const neonR = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff2bd6).multiplyScalar(4), toneMapped: false });
   for (const s of [-1, 1]) {
     const d = s * WALL_DIST;
-    const w = new THREE.Mesh(wallRibbon(track, d, 0, 1.15, 8), wallMat);
+    const w = new THREE.Mesh(wallRibbon(track, d, 0, 1.15, 36), s < 0 ? wallMat : wallMatR);
     w.castShadow = true; w.receiveShadow = true;
     scene.add(w);
     const tube = new THREE.Mesh(wallRibbon(track, d - s * 0.02, 1.1, 1.24, 10), s < 0 ? neonL : neonR);
@@ -363,20 +369,26 @@ export function buildWorld(scene, renderer, track) {
 
   // Grandstand along the outside of the main straight
   const stand = new THREE.Group();
-  const standMat = new THREE.MeshStandardMaterial({ color: 0x3b3550, roughness: 0.7, metalness: 0.2 });
-  const crowdMat = new THREE.MeshStandardMaterial({ roughness: 0.8 });
-  const crowdGeo = new THREE.BoxGeometry(0.5, 0.8, 0.4);
-  const crowdCount = 6 * 110;
+  const standMat = new THREE.MeshStandardMaterial({ map: conc.map, normalMap: conc.normalMap, color: 0x8a8296, roughness: 0.85 });
+  const crowdMat = new THREE.MeshStandardMaterial({ roughness: 0.75 });
+  // simple seated spectators: torso, shoulders and head
+  const crowdGeo = mergeGeometries([
+    // low-poly on purpose: spectators are always 20m+ from the camera
+    new THREE.CylinderGeometry(0.17, 0.21, 0.55, 6, 1, true).translate(0, 0.27, 0),
+    new THREE.IcosahedronGeometry(0.2, 0).scale(1.15, 0.45, 0.8).translate(0, 0.52, 0),
+    new THREE.IcosahedronGeometry(0.12, 0).translate(0, 0.72, 0),
+  ]);
+  const crowdCount = 6 * 140;
   const crowd = new THREE.InstancedMesh(crowdGeo, crowdMat, crowdCount);
-  const palette = [0xff2d6f, 0x22e0ff, 0xffd21f, 0xffffff, 0x9dff3a, 0xff8a1f, 0x7a5cff];
+  const palette = [0x2a2f45, 0x3b3f52, 0xd9d9de, 0x1d4e89, 0xb81d3a, 0xff2d6f, 0x22b5d0, 0xe0b020, 0x4a3a5c, 0x5c6b3a];
   let ci = 0;
   for (let r = 0; r < 6; r++) {
     const step = new THREE.Mesh(new THREE.BoxGeometry(3, 1 + r * 1.2, 100), standMat);
     step.position.set(-(WALL_DIST + 6 + r * 3), (1 + r * 1.2) / 2, -95);
     step.castShadow = true; step.receiveShadow = true;
     stand.add(step);
-    for (let k = 0; k < 110; k++) {
-      m4.makeTranslation(-(WALL_DIST + 5.5 + r * 3 + R() * 0.8), 1 + r * 1.2 + 0.4, -144 + k * 0.89 + R() * 0.2);
+    for (let k = 0; k < 140; k++) {
+      m4.makeTranslation(-(WALL_DIST + 5.6 + r * 3 + R() * 0.6), 1 + r * 1.2, -144 + k * 0.7 + R() * 0.15);
       crowd.setMatrixAt(ci, m4);
       crowd.setColorAt(ci, new THREE.Color(palette[Math.floor(R() * palette.length)]));
       ci++;
@@ -405,12 +417,12 @@ export function buildWorld(scene, renderer, track) {
   const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.25, 0.4, 3, 6).translate(0, 1.5, 0),
     new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: 1 }), treeSpots.length);
   const leafGeo = mergeGeometries([
-    new THREE.ConeGeometry(2.6, 5, 7).translate(0, 4.5, 0),
-    new THREE.ConeGeometry(2.0, 4, 7).translate(0, 6.8, 0),
-    new THREE.ConeGeometry(1.3, 3, 7).translate(0, 8.8, 0),
+    new THREE.ConeGeometry(2.6, 5, 12).translate(0, 4.5, 0),
+    new THREE.ConeGeometry(2.0, 4, 12).translate(0, 6.8, 0),
+    new THREE.ConeGeometry(1.3, 3, 12).translate(0, 8.8, 0),
   ]);
   const leaves = new THREE.InstancedMesh(leafGeo,
-    new THREE.MeshStandardMaterial({ color: 0x1d5a3a, roughness: 0.85, flatShading: true }), treeSpots.length);
+    new THREE.MeshStandardMaterial({ color: 0x1d5a3a, roughness: 0.8 }), treeSpots.length);
   const tint = new THREE.Color();
   treeSpots.forEach(([x, z, s], k) => {
     q.setFromAxisAngle(up, R() * Math.PI * 2);
@@ -423,13 +435,22 @@ export function buildWorld(scene, renderer, track) {
   scene.add(trunk, leaves);
 
   // City skyline (merged into one draw call)
-  const winTex = canvasTexture(128, 256, (g, w, h) => {
-    g.fillStyle = '#07060d'; g.fillRect(0, 0, w, h);
-    for (let y = 4; y < h; y += 12) for (let x = 4; x < w; x += 10) {
-      const r = R();
-      if (r < 0.3) {
-        g.fillStyle = r < 0.08 ? '#ff7fe1' : r < 0.16 ? '#7fefff' : '#ffd79a';
-        g.globalAlpha = 0.5 + R() * 0.5; g.fillRect(x, y, 6, 7); g.globalAlpha = 1;
+  const winTex = canvasTexture(256, 512, (g, w, h) => {
+    g.fillStyle = '#05050a'; g.fillRect(0, 0, w, h);
+    for (let y = 6; y < h - 10; y += 22) {
+      g.fillStyle = '#0c0b14'; g.fillRect(0, y + 17, w, 5); // floor slab
+      for (let x = 2; x < w; x += 16) {
+        const r = R();
+        if (r < 0.22) {
+          const warm = r < 0.15;
+          const gr = g.createLinearGradient(0, y, 0, y + 16);
+          gr.addColorStop(0, warm ? '#ffe2b0' : '#bff3ff'); gr.addColorStop(1, warm ? '#c98a4a' : '#5aa7c9');
+          g.fillStyle = gr; g.globalAlpha = 0.55 + R() * 0.45;
+        } else {
+          g.fillStyle = `rgb(${12 + R() * 10},${14 + R() * 10},${26 + R() * 14})`; g.globalAlpha = 1;
+        }
+        g.fillRect(x, y, 12, 15);
+        g.globalAlpha = 1;
       }
     }
   });
@@ -447,7 +468,7 @@ export function buildWorld(scene, renderer, track) {
     bGeoms.push(g);
   }
   const city = new THREE.Mesh(mergeGeometries(bGeoms), new THREE.MeshStandardMaterial({
-    color: 0x0c0a16, roughness: 0.6, metalness: 0.4, emissiveMap: winTex, emissive: 0xffffff, emissiveIntensity: 1.4,
+    color: 0x15131f, map: winTex, roughness: 0.35, metalness: 0.6, emissiveMap: winTex, emissive: 0xffffff, emissiveIntensity: 1.1,
   }));
   scene.add(city);
 

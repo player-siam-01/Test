@@ -286,3 +286,47 @@ test('touch controls work on a phone-sized screen', async ({ browser }) => {
   expect(errs).toEqual([]);
   await ctx.close();
 });
+
+// Every on-screen control and HUD element must be fully visible and must not
+// cover another one, on small and large phones in portrait and landscape.
+const PHONES = [
+  ['iPhone SE', {}],
+  ['Galaxy S9+', {}],
+  ['Pixel 7', {}],
+  ['iPhone 14 Pro Max', {}],
+  ['Pixel 7 landscape', { viewport: { width: 915, height: 412 } }],
+];
+for (const [name, extra] of PHONES) {
+  test(`phone layout has no overlapping controls: ${name}`, async ({ browser }) => {
+    const device = devices[name.replace(' landscape', '')];
+    const { defaultBrowserType, ...opts } = device; void defaultBrowserType;
+    const ctx = await browser.newContext({ ...opts, ...extra });
+    const page = await ctx.newPage();
+    const errs = trackErrors(page);
+    await boot(page);
+
+    // menu: the option buttons in each row are the same height (no wrapped labels)
+    const heights = await page.evaluate(() => [...document.querySelectorAll('.seg')].map((seg) =>
+      [...seg.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().height))));
+    for (const row of heights) expect(new Set(row).size, JSON.stringify(heights)).toBe(1);
+
+    await page.click('#start-btn');
+    await expect(page.locator('#t-gas')).toBeVisible();
+    const layout = await page.evaluate(() => {
+      const ids = ['#t-left', '#t-right', '#t-gas', '#t-brake', '#t-nitro', '#t-drift', '#speedo', '#minimap',
+        '#pause-btn', '#hud-pos', '#hud-lap', '#hud-time', '#hud-laps'];
+      const R = ids.map((id) => [id, document.querySelector(id).getBoundingClientRect()]);
+      const overlaps = [];
+      for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
+        const a = R[i][1], b = R[j][1];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlaps.push(`${R[i][0]} x ${R[j][0]}`);
+      }
+      const offscreen = R.filter(([, a]) => a.left < 0 || a.top < 0 || a.right > innerWidth || a.bottom > innerHeight).map(([id]) => id);
+      return { overlaps, offscreen };
+    });
+    expect(layout.overlaps).toEqual([]);
+    expect(layout.offscreen).toEqual([]);
+    expect(errs).toEqual([]);
+    await ctx.close();
+  });
+}

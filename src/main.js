@@ -4,6 +4,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GradeShader } from './post.js';
 import { Race, FIXED_DT } from './race.js';
 import { SPEC } from './physics.js';
 import { buildWorld } from './world.js';
@@ -69,16 +71,26 @@ const sparks = new Particles(400, { additive: true, gravity: 12, drag: 0.6, grow
 const skids = new SkidMarks(1600);
 scene.add(smoke.points, sparks.points, skids.mesh);
 
-const composer = new EffectComposer(renderer);
+// HDR target with 4x MSAA: removes the jagged "pixel" edges
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.75, 0.55, 0.86);
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.6, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
+const grade = new ShaderPass(GradeShader);
+composer.addPass(grade);
 
 function applyQuality() {
   const high = settings.quality === 'high';
-  renderer.setPixelRatio(high ? Math.min(2, window.devicePixelRatio || 1) : 1);
-  bloom.enabled = high;
+  // never render below 1.5x on high-DPI phones: 1x looks blocky on a 3x screen
+  renderer.setPixelRatio(Math.min(high ? 2 : 1.5, window.devicePixelRatio || 1));
+  bloom.enabled = true;
+  bloom.strength = high ? 0.6 : 0.5;
+  // MSAA is the costliest part on weak GPUs: 4x on High, off in Performance mode
+  const samples = high ? 4 : 0;
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) {
+    if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
+  }
   world.sun.castShadow = high;
   renderer.shadowMap.enabled = high;
   resize();
@@ -326,7 +338,7 @@ function updateCamera(dt, t) {
     const target = new THREE.Vector3(p.x, 0.9, p.z);
     camera.position.set(p.x + Math.sin(a) * 8.5, 2.6 + Math.sin(t * 0.5) * 0.5, p.z + Math.cos(a) * 8.5);
     camera.lookAt(target);
-    camera.fov = 50; camera.updateProjectionMatrix(); updateParticleScale();
+    camera.fov = camera.aspect < 1 ? 74 : 50; camera.updateProjectionMatrix(); updateParticleScale();
     snapCamera = true;
     return;
   }
@@ -366,7 +378,10 @@ function updateCamera(dt, t) {
   }
   camera.lookAt(camState.look);
   const speedK = Math.min(1.2, Math.abs(p.speed) / SPEC.maxSpeed);
-  const fovT = 62 + speedK * 14 + (p.nitroActive ? 9 : 0);
+  // portrait phones get a wider vertical FOV so the car doesn't fill the screen
+  const baseFov = camera.aspect >= 1 ? 60 : Math.min(92, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(30)) / camera.aspect)) * 0.8);
+  const fovT = baseFov + speedK * 12 + (p.nitroActive ? 8 : 0);
+  grade.uniforms.uSpeed.value = Math.max(0, speedK - 0.35) * 1.1 + (p.nitroActive ? 0.5 : 0);
   camState.fov += (fovT - camState.fov) * Math.min(1, dt * 4);
   camera.fov = camState.fov;
   camera.updateProjectionMatrix();
@@ -468,9 +483,10 @@ function updateHUD(dt) {
 let last = performance.now(), elapsed = 0, frames = 0, fps = 60, fpsAcc = 0, fpsN = 0;
 let gearLabel = 'N';
 function frame(now) {
-  const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+  const realDt = Math.max(0, (now - last) / 1000);
+  const dt = Math.min(0.1, realDt);
   last = now; elapsed += dt; frames++;
-  fpsAcc += dt; fpsN++;
+  fpsAcc += realDt; fpsN++;
   if (fpsAcc > 0.5) { fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; }
 
   const active = ui === 'race' || ui === 'results';
@@ -488,6 +504,8 @@ function frame(now) {
   if (ui !== 'menu') updateHUD(dt);
   const g = audio.update({ speed: p.speed, throttle: p.throttle, drift: p.drift, nitro: p.nitroActive, active: active && ui !== 'paused' });
   if (g) gearLabel = p.speed < -0.5 ? 'R' : Math.abs(p.speed) < 0.5 ? 'N' : String(g);
+  grade.uniforms.uTime.value = elapsed % 100;
+  if (ui === 'menu') grade.uniforms.uSpeed.value = 0;
   composer.render(dt);
   requestAnimationFrame(frame);
 }
