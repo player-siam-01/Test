@@ -1,0 +1,15 @@
+{
+  "name": "neon-velocity",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A high-visual 3D arcade racing game built with Three.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "playwright test --trace off"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "three": "0.170.0"
+  },
+  "type": "module"
+}
