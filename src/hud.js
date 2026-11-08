@@ -35,7 +35,7 @@ export class Speedometer {
       const r1 = r - 12, r2 = r - (major ? 22 : 17);
       g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = major ? 2 : 1;
       g.beginPath(); g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); g.stroke();
-      if (major) g.fillText(String(v), cx + Math.cos(a) * (r - 33), cy + Math.sin(a) * (r - 33));
+      if (major && v > 0 && v < max) g.fillText(String(v), cx + Math.cos(a) * (r - 33), cy + Math.sin(a) * (r - 33));
     }
     // needle
     const an = a0 + (a1 - a0) * frac;

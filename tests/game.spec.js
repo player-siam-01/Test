@@ -87,8 +87,11 @@ test('countdown runs in real time, then keyboard controls drive the car', async 
   const s0 = await state(page);
   await page.keyboard.down('ArrowUp');
   await expect.poll(async () => (await state(page)).player.speed, { timeout: 20_000 }).toBeGreaterThan(8);
+  await expect.poll(async () => {
+    const p = (await state(page)).player;
+    return Math.hypot(p.x - s0.player.x, p.z - s0.player.z);
+  }, { timeout: 20_000 }).toBeGreaterThan(2);
   const s1 = await state(page);
-  expect(Math.hypot(s1.player.x - s0.player.x, s1.player.z - s0.player.z)).toBeGreaterThan(2);
   await expect(page.locator('#speedo')).toBeVisible();
 
   // steering left turns the car (heading increases)
@@ -190,7 +193,9 @@ test('nitro gives a measurable speed boost and drains the tank', async ({ page }
   const run = async (nitro) => {
     await page.evaluate(() => document.getElementById('start-btn').click());
     await simulate(page, 3.1, { autopilot: false });
-    return simulate(page, 6, { autopilot: false, input: { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro } });
+    await page.evaluate(() => window.__game.teleport(0)); // centre of the straight, aligned with it
+    // 2.5 s keeps both runs on the asphalt of the start straight
+    return simulate(page, 2.5, { autopilot: false, input: { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro } });
   };
   const plain = await run(false);
   await page.evaluate(() => document.getElementById('quit-btn').click());

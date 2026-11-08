@@ -147,7 +147,9 @@ export function stepCar(car, input, track, dt, spec = SPEC) {
     const vn = vx * sx + vz * sz;
     if (vn > 0) {
       vx -= sx * vn * 1.35; vz -= sz * vn * 1.35;
-      vx *= 0.93; vz *= 0.93;
+      // friction scales with impact: glancing scrapes barely slow the car
+      const keep = 1 - Math.min(0.35, vn * 0.025);
+      vx *= keep; vz *= keep;
       car.wallImpact = vn;
     }
   }
