@@ -224,6 +224,17 @@ function toggleMute() {
   $('mute-btn').textContent = `Sound: ${audio.muted ? 'Off' : 'On'}`;
 }
 $('mute-btn').textContent = `Sound: ${audio.muted ? 'Off' : 'On'}`;
+audio.musicOn = store.get('nv-music', true);
+const syncMusicBtn = () => { $('music-btn').textContent = `Music: ${audio.musicOn ? 'On' : 'Off'}`; };
+syncMusicBtn();
+$('music-btn').addEventListener('click', () => { audio.setMusicOn(!audio.musicOn); store.set('nv-music', audio.musicOn); syncMusicBtn(); });
+// browsers only allow sound after the first tap / key press: start the menu music then
+const unlockAudio = () => {
+  audio.init(); audio.setMuted(audio.muted);
+  if (ui === 'menu') audio.playMusic('menu');
+  window.removeEventListener('pointerdown', unlockAudio); window.removeEventListener('keydown', unlockAudio);
+};
+window.addEventListener('pointerdown', unlockAudio); window.addEventListener('keydown', unlockAudio);
 
 function setPressed(groupEl, value) {
   for (const b of groupEl.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(value)));
@@ -287,6 +298,8 @@ function show(id, on) { $(id).classList.toggle('hidden', !on); }
 function startRace() {
   audio.init();
   audio.setMuted(audio.muted);
+  audio.playMusic('race');
+  audio.duckMusic(false);
   race.setup({ ...settings, playerColor: settings.color });
   syncCarViews();
   skids.clear();
@@ -298,8 +311,8 @@ function startRace() {
   resultsShown = false;
 }
 function setPaused(p) {
-  if (p && ui === 'race') { ui = 'paused'; show('pause', true); keys.clear(); }
-  else if (!p && ui === 'paused') { ui = race.state === 'finished' ? 'results' : 'race'; show('pause', false); }
+  if (p && ui === 'race') { ui = 'paused'; show('pause', true); keys.clear(); audio.duckMusic(true); }
+  else if (!p && ui === 'paused') { ui = race.state === 'finished' ? 'results' : 'race'; show('pause', false); audio.duckMusic(false); }
 }
 function toMenu() {
   ui = 'menu';
@@ -308,6 +321,8 @@ function toMenu() {
   skids.clear();
   show('pause', false); show('results', false); show('hud', false); show('touch', false); show('menu', true);
   syncMenu();
+  audio.playMusic('menu');
+  audio.duckMusic(false);
 }
 $('start-btn').addEventListener('click', startRace);
 $('resume-btn').addEventListener('click', () => setPaused(false));
@@ -343,6 +358,7 @@ function handleEvents(events) {
       const isBest = !best.lap || e.time < best.lap;
       if (isBest) { best.lap = e.time; store.set('nv-best', best); }
       banner(e.final ? 'FINAL LAP' : `LAP ${e.lap}`, '', 1800);
+      if (e.final) audio.playMusic('final');
       setTimeout(() => ui === 'race' && banner(`${isBest ? 'NEW BEST ' : ''}${fmt(e.time)}`, '', 1400), 1800);
     } else if (e.type === 'finish') {
       const p = race.player;
@@ -585,7 +601,8 @@ window.__game = {
     const p = race.player;
     return {
       ui, mode: race.mode, raceState: race.state, time: race.time, countdown: race.countdown, laps: race.laps, difficulty: race.difficulty,
-      camera: CAMERAS[camMode], muted: audio.muted, quality: settings.quality, autoLevel, fps, frames, touch: isTouch,
+      camera: CAMERAS[camMode], muted: audio.muted,
+      audio: { started: !!audio.ctx, engineSamples: !!audio.samplesReady, music: audio.currentMusic?.which ?? null, musicOn: audio.musicOn }, quality: settings.quality, autoLevel, fps, frames, touch: isTouch,
       position: race.positionOf(p),
       player: { x: p.x, z: p.z, heading: p.heading, speed: p.speed, kmh: Math.abs(p.speed) * 3.6, lap: p.lapCounter + 1,
         lapCounter: p.lapCounter, nitro: p.nitro, nitroActive: p.nitroActive, drift: p.drift, offroad: p.offroad, lat: p.lat,

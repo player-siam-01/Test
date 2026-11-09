@@ -1,8 +1,8 @@
 # Neon Velocity
 
-A high-visual 3D arcade racing game that runs in the browser, built with
-[Three.js](https://threejs.org). Race three AI rivals around a neon-lit
-sunset circuit: drift to charge your nitro, then boost down the straights.
+A realistic-looking 3D racing game that runs in the browser, built with
+[Three.js](https://threejs.org). Race three AI rivals around a daytime
+circuit lit by a real HDR sky, or set a time in solo Time Trial.
 
 ![Race view](docs/race.png)
 
@@ -32,27 +32,32 @@ vendored in `vendor/three`, so nothing is fetched from a CDN).
 
 ## Features
 
-- **Visuals:** HDR rendering with ACES tone mapping, a bloom pass, soft
-  shadows, a procedural synthwave sky (striped sun, stars) that also lights
-  the clear-coat car paint through its reflections, neon barriers, street
-  lamps that light the road, a city skyline, mountains, forests and a cheering
-  grandstand.
-- **Cars:** procedural sports cars with spinning and steering wheels, body
-  roll, brake lights, headlights, coloured underglow and nitro flames.
-- **Effects:** tyre smoke, off-road dust, impact sparks, skid marks that stay
-  on the track, camera shake, and FOV that widens with speed.
-- **Gameplay:** arcade physics with grip, handbrake drifts and barrier
-  collisions. Drifting fills the nitro tank faster. Three AI rivals follow a
-  racing line, plan their braking, overtake each other and use nitro.
-- **Modes:** Grand Prix (four cars) or solo Time Trial; 1, 3 or 5 laps; Easy,
-  Normal or Hard AI.
-- **HUD:** live positions with gaps, lap and best-lap timers, an animated
-  speedometer with gear and nitro readout, a minimap, start lights and a
-  countdown, a wrong-way warning, and a results screen.
-- **Sound:** all audio is synthesised with WebAudio (engine RPM with gear
-  changes, tyre screech, wind, impacts, countdown beeps).
-- **Settings:** paint colour, mode, difficulty, laps and graphics quality are
-  remembered, along with your best lap and race times.
+- **Look:** real HDR sky (Poly Haven) for the backdrop, lighting and
+  reflections; photo textures for the track asphalt, grass, concrete walls
+  and gravel traps; fir forests built from photo branch cards; catch
+  fences, ad boards, a grandstand and rolling hills. ACES tone mapping,
+  soft shadows, MSAA, subtle bloom and speed blur.
+- **Driving:** a single-track ("bicycle") vehicle model with non-linear
+  tyres, friction circle, load transfer, downforce, AWD with a rear bias,
+  ABS-limited rear brakes, traction control and a light stability assist.
+  0-100 km/h in 2.3 s, 100-0 km/h braking in 32 m, about 255 km/h top speed.
+  Handbrake drifts fill the nitro tank.
+- **AI:** three rivals follow a racing line, plan their braking from a
+  grip-limited speed plan, overtake, use nitro, and recover from spins.
+- **Sound:** recorded engine loops crossfaded by RPM through six gears;
+  racing music that switches to a faster version on the final lap; menu
+  music; synthesised tyre squeal, wind and impacts.
+- **Modes and settings:** Grand Prix or Time Trial; 1, 3 or 5 laps; Easy,
+  Normal or Hard AI; six paint colours; High quality or Performance
+  graphics, plus automatic quality scaling on slower devices.
+- **HUD:** live positions with gaps, lap timers, speedometer with gear and
+  nitro, minimap, start lights, countdown, wrong-way warning, results.
+- **Mobile:** touch controls sized to the screen, checked on five phone
+  sizes for overlaps.
+
+All third-party assets are CC0; see [assets/CREDITS.md](assets/CREDITS.md).
+The game downloads about 6 MB before the menu appears; music (about 5 MB)
+streams in afterwards.
 
 ## Tests
 
@@ -76,6 +81,8 @@ What the tests cover:
 | Pause | Pausing freezes the race clock; Resume continues it; Restart begins a new countdown |
 | Hotkeys | Camera cycling, mute, and resetting the car to the track |
 | Physics | Barriers keep the car on the track; nitro gives a measurable speed boost |
+| Sound | Engine recordings load; music switches menu -> race -> final lap; music toggle |
+| Phone layout | No control or HUD element overlaps another on five phone sizes |
 | AI | All rivals drive inside the track at racing speed, and the live leaderboard updates |
 | Warnings | Driving the wrong way shows a warning |
 | Full race | A complete race ends on the results screen, best times are saved, and Race Again works |
@@ -96,10 +103,13 @@ src/main.js         renderer, post-processing, input, UI, game loop, test hooks
 src/race.js         race manager: grid, countdown, laps, standings, results
 src/physics.js      car physics, AI driver, car-to-car collisions
 src/track.js        circuit spline, sampling, nearest-point queries
-src/world.js        sky, lighting, road, curbs, barriers, scenery
+src/world.js        HDR sky, lighting, road, curbs, barriers, scenery
+src/textures.js     procedural noise helpers
+src/post.js         final lens/grade pass
+assets/             CC0 images, HDR sky and audio (see CREDITS.md)
 src/carModel.js     procedural car mesh
 src/effects.js      particle system and skid marks
-src/audio.js        synthesised sound
+src/audio.js        engine samples, music, synthesised effects
 src/hud.js          speedometer and minimap
 tests/game.spec.js  Playwright end-to-end tests
 vendor/three/       Three.js r170 (MIT) and the post-processing add-ons it needs

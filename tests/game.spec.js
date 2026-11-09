@@ -108,6 +108,29 @@ test('countdown runs in real time, then keyboard controls drive the car', async 
   await page.keyboard.up('ArrowDown');
 });
 
+test('sound: engine recordings load and music follows menu -> race -> final lap', async ({ page }) => {
+  await boot(page);
+  await page.click('#laps button[data-v="1"]'); // first tap unlocks audio -> menu music
+  await expect.poll(async () => (await state(page)).audio.music, { timeout: 30_000 }).toBe('menu');
+  await page.click('#start-btn');
+  await expect.poll(async () => (await state(page)).audio.engineSamples, { timeout: 30_000 }).toBe(true);
+  await expect.poll(async () => (await state(page)).audio.music, { timeout: 30_000 }).toBe('race');
+  // 1-lap race: the first lap is also the final lap, so finishing it is covered elsewhere;
+  // here use a 3-lap race to reach the final-lap switch
+  await page.evaluate(() => document.getElementById('quit-btn').click());
+  await expect.poll(async () => (await state(page)).audio.music, { timeout: 30_000 }).toBe('menu');
+  await page.click('#laps button[data-v="3"]');
+  await page.click('#start-btn');
+  await simulate(page, 3.1, { autopilot: false });
+  await simulate(page, 115, { autopilot: true }); // two laps
+  await expect.poll(async () => (await state(page)).audio.music, { timeout: 30_000 }).toBe('final');
+  // music toggle in the pause menu
+  await page.keyboard.press('Escape');
+  await page.click('#music-btn');
+  await expect(page.locator('#music-btn')).toHaveText('Music: Off');
+  expect((await state(page)).audio.musicOn).toBe(false);
+});
+
 test('pause freezes the race clock and resume continues it', async ({ page }) => {
   await boot(page);
   await startAndWaitForGreen(page);
