@@ -23,4 +23,4 @@ http.createServer(async (req, res) => {
   } catch {
     res.writeHead(404).end('Not found');
   }
-}).listen(port, () => console.log(`Neon Velocity running at http://localhost:${port}`));
+}).listen(port, () => console.log(`Kurv Race running at http://localhost:${port}`));

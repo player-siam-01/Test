@@ -421,7 +421,7 @@ export function buildWorld(scene, renderer, track) {
   const signTex = canvasTexture(1024, 96, (g, w, h) => {
     g.fillStyle = '#16181c'; g.fillRect(0, 0, w, h);
     g.font = '800 58px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#f4f4f4'; g.fillText('GRAND PRIX  ·  START / FINISH', w / 2, h / 2 + 3);
+    g.fillStyle = '#f4f4f4'; g.fillText('KURV RACE  ·  START / FINISH', w / 2, h / 2 + 3);
   });
   for (const s of [-1, 1]) {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(WALL_DIST * 2, 1.3), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.6 }));

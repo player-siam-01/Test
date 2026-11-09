@@ -1,4 +1,4 @@
-# Neon Velocity
+# Kurv Race
 
 A realistic-looking 3D racing game that runs in the browser, built with
 [Three.js](https://threejs.org). Race three AI rivals around a daytime

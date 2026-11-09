@@ -1,4 +1,4 @@
-// End-to-end tests for Neon Velocity. They drive the real game in Chromium
+// End-to-end tests for Kurv Race. They drive the real game in Chromium
 // (WebGL via SwiftShader): menus, keyboard/touch input, physics, AI, laps,
 // pause, results, persistence and rendering output.
 import { test, expect, devices } from '@playwright/test';
@@ -37,8 +37,8 @@ test.afterEach(async () => { expect(errors, errors.join('\n')).toEqual([]); });
 
 test('boots, renders a lit 3D scene and shows the main menu', async ({ page }) => {
   await boot(page, '?quality=high');
-  await expect(page).toHaveTitle('Neon Velocity');
-  await expect(page.locator('.title').first()).toContainText('NEON');
+  await expect(page).toHaveTitle('Kurv Race');
+  await expect(page.locator('.title').first()).toContainText('KURV');
   await expect(page.locator('#loading')).toBeHidden();
 
   const pix = await page.evaluate(() => window.__game.snapshotStats());
