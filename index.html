@@ -44,7 +44,9 @@
   .logo span { display: block; color: var(--mint); }
 
   /* ---------- menu: home + garage ---------- */
-  #menu { z-index: 20; }
+  #menu { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+  #menu button, #menu .stats, #menu .swatches { pointer-events: auto; }
+  #home, #garage { position: fixed; inset: 0; }
   #menu .shade { position: fixed; inset: 0; pointer-events: none;
     background: linear-gradient(180deg, rgba(13,79,90,.55) 0%, rgba(13,79,90,0) 28%, rgba(13,79,90,0) 62%, rgba(13,79,90,.72) 100%); }
   .topbar { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
