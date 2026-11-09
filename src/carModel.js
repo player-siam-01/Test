@@ -134,6 +134,7 @@ function bakeByMaterial(group, keep = new Set()) {
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     const m = new THREE.Mesh(geo, mat);
+    m.userData.owned = true; // per-car geometry: disposed when the car is rebuilt
     m.castShadow = true; m.receiveShadow = true;
     group.add(m);
   }
@@ -205,7 +206,12 @@ function buildWheel(A, outward) {
   return wheel;
 }
 
-export function buildCar(color) {
+/**
+ * shape: { sx, sy, sz (body proportions), cabinY (glasshouse height), wing, wheel (wheel size) }
+ * Different models (see cars.js) reuse the same parts with different proportions.
+ */
+export function buildCar(color, shape = {}) {
+  const S = { sx: 1, sy: 1, sz: 1, cabinY: 1, wing: true, wheel: 1, ...shape };
   const A = sharedAssets();
   const car = new THREE.Group();
   const body = new THREE.Group();
@@ -223,6 +229,8 @@ export function buildCar(color) {
   body.add(cabin);
   const roof = new THREE.Mesh(A.roof, paint);
   body.add(roof);
+  // taller / lower glasshouse: scale it up from its base (y ~0.72) so it stays seated on the body
+  for (const m of [cabin, roof]) { m.scale.y = S.cabinY; m.position.y = -0.72 * (S.cabinY - 1); }
 
   // contrast stripes running over the bonnet and roof
   const stripeMat = new THREE.MeshPhysicalMaterial({ color: 0xf2f2f6, roughness: 0.25, clearcoat: 1, metalness: 0.2 });
@@ -266,7 +274,14 @@ export function buildCar(color) {
     body.add(fin);
   }
 
-  // rear wing
+  // rear wing (track cars) or a small ducktail lip (road cars)
+  if (!S.wing) {
+    const lip = new THREE.Mesh(loft([
+      { z: -2.24, w: 0.8, y0: 0.84, y1: 0.86, n: 2 }, { z: -2.1, w: 0.86, y0: 0.86, y1: 0.93, n: 2 }, { z: -1.95, w: 0.86, y0: 0.88, y1: 0.9, n: 2 },
+    ], { rings: 6, segs: 12, nb: 2 }), paint);
+    body.add(lip);
+  }
+  if (S.wing) {
   const wing = new THREE.Mesh(loft([
     { z: -2.2, w: 0.95, y0: 1.06, y1: 1.08, n: 2 }, { z: -2.02, w: 0.95, y0: 1.07, y1: 1.12, n: 2 },
     { z: -1.85, w: 0.95, y0: 1.08, y1: 1.1, n: 2 },
@@ -280,6 +295,7 @@ export function buildCar(color) {
     const plate = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.2, 0.42), A.carbon);
     plate.position.set(s * 0.96, 1.09, -2.02);
     body.add(plate);
+  }
   }
 
   // headlights: lens + LED strip; taillights: full-width light bar
@@ -320,13 +336,15 @@ export function buildCar(color) {
 
   // collapse the static bodywork into one mesh per material (flames stay separate: they toggle)
   bakeByMaterial(body, new Set(flames));
+  body.scale.set(S.sx, S.sy, S.sz);
 
   // wheels with brake discs and calipers (calipers don't spin)
   const wheels = [], steerPivots = [];
   for (const [x, z, front] of [[-0.9, 1.36, true], [0.9, 1.36, true], [-0.9, -1.4, false], [0.9, -1.4, false]]) {
     const outward = Math.sign(x);
     const pivot = new THREE.Group();
-    pivot.position.set(x, 0.367, z);
+    pivot.position.set(x * S.sx, 0.367 * S.wheel, z * S.sz);
+    pivot.scale.setScalar(S.wheel);
     const wheel = buildWheel(A, outward);
     pivot.add(wheel);
     const disc = new THREE.Mesh(A.discGeo, A.disc);
@@ -350,6 +368,7 @@ export function buildCar(color) {
   const blob = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.2),
     new THREE.MeshBasicMaterial({ map: A.blob, transparent: true, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; blob.position.y = 0.055;
+  blob.scale.set(S.sx, S.sz, 1);
   car.add(blob);
 
   return {

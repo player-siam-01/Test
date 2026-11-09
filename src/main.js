@@ -10,6 +10,7 @@ import { Race, FIXED_DT } from './race.js';
 import { SPEC } from './physics.js';
 import { buildWorld } from './world.js';
 import { buildCar } from './carModel.js';
+import { CAR_MODELS, modelById, rosterStats } from './cars.js';
 import { Particles, SkidMarks } from './effects.js';
 import { AudioFX } from './audio.js';
 import { Speedometer, Minimap } from './hud.js';
@@ -25,11 +26,13 @@ const store = {
 const COLORS = [0xc8102e, 0xb8bcc2, 0x1e3f8a, 0xeeeeea, 0x16171a, 0x1f4d2b];
 // phones and tablets start in the lighter graphics mode; computers in High
 const coarsePointer = matchMedia('(pointer: coarse)').matches;
-const settings = Object.assign({ color: COLORS[0], difficulty: 'normal', laps: 3, mode: 'race', quality: coarsePointer ? 'low' : 'high' },
+const settings = Object.assign({ color: COLORS[0], car: 'gt', difficulty: 'normal', laps: 3, mode: 'race', quality: coarsePointer ? 'low' : 'high' },
   store.get('nv-settings', {}));
 if (params.get('quality')) settings.quality = params.get('quality');
 if (params.get('laps')) settings.laps = +params.get('laps');
 if (!COLORS.includes(settings.color)) settings.color = COLORS[0]; // saved colour from an older version
+if (!CAR_MODELS.some((m) => m.id === settings.car)) settings.car = 'gt';
+const raceOpts = () => ({ ...settings, playerColor: settings.color, carModel: settings.car });
 let best = store.get('nv-best', {}); // { lap: seconds, ['race'+laps]: seconds }
 
 const fmt = (t) => {
@@ -57,19 +60,28 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 7000);
 const race = new Race();
-race.setup(settings);
+race.setup(raceOpts());
 const world = buildWorld(scene, renderer, race.track);
 
-const carViews = race.cars.map((c) => {
-  const v = buildCar(c.color);
-  scene.add(v.group);
-  return v;
-});
-// player headlights
+// player headlights (re-attached whenever the car views are rebuilt)
 const headlight = new THREE.SpotLight(0xfff1dd, 60, 70, 0.5, 0.6, 1.6);
 headlight.position.set(0, 0.8, 1.8);
 headlight.target.position.set(0, 0, 18);
-carViews[0].group.add(headlight, headlight.target);
+let carViews = [];
+/** (Re)build one 3D car per race car, with that car's model proportions and paint. */
+function rebuildCarViews() {
+  for (const v of carViews) {
+    scene.remove(v.group);
+    v.group.traverse((o) => { if (o.userData.owned) o.geometry.dispose(); });
+  }
+  carViews = race.cars.map((c) => {
+    const v = buildCar(c.color, modelById(c.model).shape);
+    scene.add(v.group);
+    return v;
+  });
+  carViews[0].group.add(headlight, headlight.target);
+}
+rebuildCarViews();
 
 const smoke = new Particles(900, { drag: 1.1, grow: 3.2 });
 const sparks = new Particles(400, { additive: true, gravity: 12, drag: 0.6, grow: -0.7 });
@@ -174,7 +186,8 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyR' && ui === 'race' && race.state === 'racing') race.respawn();
   else if (e.code === 'KeyP' || e.code === 'Escape') {
     if (ui === 'race') setPaused(true); else if (ui === 'paused') setPaused(false);
-  } else if (e.code === 'Enter' && ui === 'menu') startRace();
+  } else if (e.code === 'Enter' && ui === 'menu') { if (menuScreen === 'home') showGarage(settings.mode); else startRace(); }
+  else if (e.code === 'Escape' && !$('settings').classList.contains('hidden')) show('settings', false);
 });
 window.addEventListener('keyup', (e) => { const k = KEYMAP[e.code]; if (k) keys.delete(k); });
 window.addEventListener('blur', () => keys.clear());
@@ -221,13 +234,20 @@ function cycleCamera() { camMode = (camMode + 1) % CAMERAS.length; if (ui === 'r
 function toggleMute() {
   audio.setMuted(!audio.muted);
   store.set('nv-muted', audio.muted);
-  $('mute-btn').textContent = `Sound: ${audio.muted ? 'Off' : 'On'}`;
+  syncSoundBtns();
 }
-$('mute-btn').textContent = `Sound: ${audio.muted ? 'Off' : 'On'}`;
+function syncSoundBtns() {
+  for (const id of ['mute-btn', 'set-sound']) $(id).textContent = `Sound: ${audio.muted ? 'Off' : 'On'}`;
+}
+syncSoundBtns();
+$('mute-btn').addEventListener('click', toggleMute);
+$('set-sound').addEventListener('click', toggleMute);
 audio.musicOn = store.get('nv-music', true);
-const syncMusicBtn = () => { $('music-btn').textContent = `Music: ${audio.musicOn ? 'On' : 'Off'}`; };
+const syncMusicBtn = () => { for (const id of ['music-btn', 'set-music']) $(id).textContent = `Music: ${audio.musicOn ? 'On' : 'Off'}`; };
 syncMusicBtn();
-$('music-btn').addEventListener('click', () => { audio.setMusicOn(!audio.musicOn); store.set('nv-music', audio.musicOn); syncMusicBtn(); });
+const toggleMusic = () => { audio.setMusicOn(!audio.musicOn); store.set('nv-music', audio.musicOn); syncMusicBtn(); };
+$('music-btn').addEventListener('click', toggleMusic);
+$('set-music').addEventListener('click', toggleMusic);
 // browsers only allow sound after the first tap / key press: start the menu music then
 const unlockAudio = () => {
   audio.init(); audio.setMuted(audio.muted);
@@ -247,7 +267,7 @@ for (const c of COLORS) {
   b.style.background = '#' + c.toString(16).padStart(6, '0');
   b.style.color = b.style.background;
   b.setAttribute('aria-label', 'Paint #' + c.toString(16).padStart(6, '0'));
-  b.addEventListener('click', () => { settings.color = c; setPressed(sw, c); carViews[0].setColor(c); race.player.color = c; saveSettings(); });
+  b.addEventListener('click', () => { settings.color = c; setPressed(sw, c); carViews[0].setColor(c); race.player.color = c; saveSettings(); sw.classList.add('hidden'); });
   sw.appendChild(b);
 }
 for (const [id, key, conv] of [['mode', 'mode', String], ['difficulty', 'difficulty', String], ['laps', 'laps', Number], ['quality', 'quality', String]]) {
@@ -261,20 +281,69 @@ for (const [id, key, conv] of [['mode', 'mode', String], ['difficulty', 'difficu
     updateBestLabel();
   });
 }
-function syncCarViews() {
-  carViews.forEach((v, i) => {
-    const c = race.cars[i];
-    v.group.visible = !!c;
-    if (c) v.setColor(c.color);
-  });
+// ---------------------------------------------------------------- garage
+let menuScreen = 'home';
+const STAT_ICONS = {
+  speed: '<svg viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 4-5"/></svg>',
+  accel: '<svg viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></svg>',
+  handling: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M4.5 10h15M12 14v6"/></svg>',
+  braking: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M17 5.5a9 9 0 0 1 2.5 4"/></svg>',
+};
+const roster = rosterStats(race.track); // measured from the physics model, not hand-typed
+function renderGarage() {
+  const m = modelById(settings.car);
+  const st = roster.find((r) => r.id === m.id);
+  $('car-name').textContent = m.name.toUpperCase();
+  $('car-tag').textContent = m.tagline;
+  const rows = [
+    ['speed', 'Top speed', `${Math.round(st.raw.topKmh)} km/h`],
+    ['accel', 'Acceleration', `0-100 ${st.raw.zeroTo100.toFixed(1)} s`],
+    ['handling', 'Handling', `${st.raw.grip.toFixed(2)} g`],
+    ['braking', 'Braking', `${Math.round(st.raw.brake100)} m`],
+  ];
+  $('stats').innerHTML = rows.map(([k, label, val]) => {
+    const n = st.bars[k];
+    const segs = Array.from({ length: 10 }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('');
+    return `<span class="ico" title="${label}">${STAT_ICONS[k]}</span><span class="segbar" aria-label="${label} ${n} of 10" data-stat="${k}" data-value="${n}">${segs}</span><span class="val">${val}</span>`;
+  }).join('');
 }
+function setCar(id) {
+  settings.car = id;
+  saveSettings();
+  race.setup(raceOpts());
+  rebuildCarViews();
+  renderGarage();
+}
+function cycleCar(dir) {
+  const i = CAR_MODELS.findIndex((m) => m.id === settings.car);
+  setCar(CAR_MODELS[(i + dir + CAR_MODELS.length) % CAR_MODELS.length].id);
+}
+function showHome() {
+  menuScreen = 'home';
+  show('home', true); show('garage', false); sw.classList.add('hidden');
+  updateBestLabel();
+}
+function showGarage(mode) {
+  if (mode) { settings.mode = mode; setPressed($('mode'), mode); saveSettings(); }
+  menuScreen = 'garage';
+  race.setup(raceOpts());
+  rebuildCarViews();
+  show('home', false); show('garage', true);
+  renderGarage();
+}
+$('gp-btn').addEventListener('click', () => showGarage('race'));
+$('tt-btn').addEventListener('click', () => showGarage('trial'));
+$('back-btn').addEventListener('click', showHome);
+$('car-prev').addEventListener('click', () => cycleCar(-1));
+$('car-next').addEventListener('click', () => cycleCar(1));
+$('color-btn').addEventListener('click', () => sw.classList.toggle('hidden'));
+$('settings-btn').addEventListener('click', () => show('settings', true));
+$('settings-close').addEventListener('click', () => show('settings', false));
 const bestKey = () => (race.mode === 'trial' ? 'trial' : 'race') + race.laps;
 function saveSettings() { store.set('nv-settings', settings); }
 function syncMenu() {
   setPressed(sw, settings.color); setPressed($('mode'), settings.mode); setPressed($('difficulty'), settings.difficulty);
   setPressed($('laps'), settings.laps); setPressed($('quality'), settings.quality);
-  syncCarViews();
-  carViews[0].setColor(settings.color);
   updateBestLabel();
 }
 function updateBestLabel() {
@@ -300,8 +369,8 @@ function startRace() {
   audio.setMuted(audio.muted);
   audio.playMusic('race');
   audio.duckMusic(false);
-  race.setup({ ...settings, playerColor: settings.color });
-  syncCarViews();
+  race.setup(raceOpts());
+  rebuildCarViews();
   skids.clear();
   ui = 'race';
   show('menu', false); show('results', false); show('pause', false);
@@ -316,11 +385,9 @@ function setPaused(p) {
 }
 function toMenu() {
   ui = 'menu';
-  race.setup({ ...settings, playerColor: settings.color });
-  syncCarViews();
-  skids.clear();
   show('pause', false); show('results', false); show('hud', false); show('touch', false); show('menu', true);
   syncMenu();
+  showGarage(); // after a race, return to the garage to pick the next car
   audio.playMusic('menu');
   audio.duckMusic(false);
 }
@@ -391,9 +458,14 @@ function updateCamera(dt, t) {
   const p0 = race.player;
   const p = { x: p0.rx ?? p0.x, z: p0.rz ?? p0.z, heading: p0.rh ?? p0.heading, speed: p0.speed, nitroActive: p0.nitroActive };
   if (ui === 'menu') {
-    const a = t * 0.22 + 0.6;
-    const target = new THREE.Vector3(p.x, 0.9, p.z);
-    camera.position.set(p.x + Math.sin(a) * 8.5, 2.6 + Math.sin(t * 0.5) * 0.5, p.z + Math.cos(a) * 8.5);
+    // home: slow wide orbit; garage: close showroom turntable around the selected car
+    const garage = menuScreen === 'garage';
+    const a = t * (garage ? 0.16 : 0.1) + (garage ? 1.2 : 0.6);
+    const r = garage ? (camera.aspect < 1 ? 8.5 : 7.2) : 12, h = garage ? 1.9 : 3.6;
+    // portrait phones: aim below the car so it sits in the upper-middle, clear of the bottom sheet
+    const portrait = camera.aspect < 1;
+    const target = new THREE.Vector3(p.x, garage ? (portrait ? -1.6 : 0.75) : 1.2, p.z);
+    camera.position.set(p.x + Math.sin(a) * r, h + Math.sin(t * 0.4) * 0.25, p.z + Math.cos(a) * r);
     camera.lookAt(target);
     camera.fov = camera.aspect < 1 ? 74 : 50; camera.updateProjectionMatrix(); updateParticleScale();
     snapCamera = true;
@@ -604,7 +676,7 @@ window.__game = {
       camera: CAMERAS[camMode], muted: audio.muted,
       audio: { started: !!audio.ctx, engineSamples: !!audio.samplesReady, music: audio.currentMusic?.which ?? null, musicOn: audio.musicOn }, quality: settings.quality, autoLevel, fps, frames, touch: isTouch,
       position: race.positionOf(p),
-      player: { x: p.x, z: p.z, heading: p.heading, speed: p.speed, kmh: Math.abs(p.speed) * 3.6, lap: p.lapCounter + 1,
+      player: { model: p.model, x: p.x, z: p.z, heading: p.heading, speed: p.speed, kmh: Math.abs(p.speed) * 3.6, lap: p.lapCounter + 1,
         lapCounter: p.lapCounter, nitro: p.nitro, nitroActive: p.nitroActive, drift: p.drift, offroad: p.offroad, lat: p.lat,
         lapTimes: [...p.lapTimes], finished: p.finished, finishTime: p.finishTime, color: p.color, wrongWay: p.wrongWay },
       cars: race.cars.map((c) => ({ name: c.name, x: c.x, z: c.z, speed: c.speed, lap: c.lapCounter + 1, finished: c.finished, lat: c.lat })),
@@ -649,9 +721,19 @@ window.__game = {
 // ---------------------------------------------------------------- boot
 applyQuality();
 syncMenu();
+showHome();
 // wait for the photo textures + HDR sky before showing the game
 world.onProgress((f) => { const b = $('load-bar'); if (b) b.style.width = Math.round(f * 100) + '%'; });
+const TIPS = [
+  'Tip: hold Space to drift — drifting fills your nitro tank.',
+  'Tip: brake before the corner, not in it. The car turns in better.',
+  'Tip: Kurv cars differ — the Kei Sprint corners best, the Vento R is fastest.',
+  'Tip: press C to switch camera, R to put the car back on track.',
+];
+let tipN = 0;
+const tipTimer = setInterval(() => { $('load-tip').textContent = TIPS[++tipN % TIPS.length]; }, 2600);
 await world.ready;
+clearInterval(tipTimer);
 // compile every shader up front (incl. nitro flames, hidden until used) so the
 // first nitro / first smoke never causes a hitch mid-race
 for (const v of carViews) for (const f of v.flames) f.visible = true;

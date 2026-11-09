@@ -1,6 +1,7 @@
 // Race manager: grid, countdown, laps, positions, results. Pure logic.
 import { createTrack, pointAt } from './track.js';
 import { Car, SPEC, stepCar, aiInput, buildSpeedTable, resolveCollisions } from './physics.js';
+import { modelById, specFor } from './cars.js';
 
 export const DIFFICULTY = {
   easy: { skill: [0.8, 0.83, 0.86], label: 'Easy' },
@@ -9,9 +10,9 @@ export const DIFFICULTY = {
 };
 
 const RIVALS = [
-  { name: 'VIPER', color: 0x2a62c9 },
-  { name: 'BLAZE', color: 0xe26b1a },
-  { name: 'NOVA', color: 0xe6b800 },
+  { name: 'VIPER', color: 0x2a62c9, model: 'gt' },
+  { name: 'BLAZE', color: 0xe26b1a, model: 'brute' },
+  { name: 'NOVA', color: 0xe6b800, model: 'vento' },
 ];
 
 export const FIXED_DT = 1 / 120;
@@ -21,12 +22,18 @@ export class Race {
   constructor(track = createTrack()) {
     this.track = track;
     this.speedTable = buildSpeedTable(track);
+    this.speedTables = new Map(); // per car model: each car brakes/corners to its own limits
     this.cars = [];
     this.state = 'idle';
     this.events = [];
   }
 
-  setup({ laps = 3, difficulty = 'normal', mode = 'race', playerColor = 0xc8102e, playerName = 'YOU' } = {}) {
+  tableFor(spec) {
+    if (!this.speedTables.has(spec)) this.speedTables.set(spec, buildSpeedTable(this.track, spec));
+    return this.speedTables.get(spec);
+  }
+
+  setup({ laps = 3, difficulty = 'normal', mode = 'race', playerColor = 0xc8102e, playerName = 'YOU', carModel = 'gt' } = {}) {
     this.laps = laps;
     this.mode = mode;
     this.difficulty = difficulty;
@@ -35,6 +42,10 @@ export class Race {
       new Car({ id: 0, name: playerName, color: playerColor, isPlayer: true }),
       ...(mode === 'trial' ? [] : RIVALS).map((r, k) => new Car({ id: k + 1, name: r.name, color: r.color, skill: skills[k], lane: [-2.5, 2.5, 0][k] })),
     ];
+    this.cars.forEach((c, k) => {
+      c.model = k === 0 ? modelById(carModel).id : RIVALS[k - 1].model;
+      c.spec = specFor(modelById(c.model));
+    });
     // 2x2 staggered grid behind the start line; player starts last-but-one
     const order = mode === 'trial' ? [null, null, this.cars[0]] : [this.cars[1], this.cars[2], this.cars[0], this.cars[3]];
     const { N, ds } = this.track;
@@ -113,7 +124,7 @@ export class Race {
       let input;
       if (car.isPlayer && !autopilot && !car.finished) input = playerInput;
       else {
-        input = aiInput(car, this.track, this.speedTable, this.cars, undefined, dt);
+        input = aiInput(car, this.track, this.tableFor(car.spec), this.cars, undefined, dt);
         // last resort for AI: stuck for 6 s -> put back on the racing line
         car.slowTime = Math.abs(car.speed) < 3 ? (car.slowTime || 0) + dt : 0;
         if (car.slowTime > 6) { this.respawn(car); car.slowTime = 0; car.reverseTimer = 0; }

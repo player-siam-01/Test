@@ -92,7 +92,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  */
 const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 
-export function stepCar(car, input, track, dt, spec = SPEC) {
+export function stepCar(car, input, track, dt, spec = car.spec || SPEC) {
   car.steer += (input.steer - car.steer) * Math.min(1, dt * 8);
   car.throttle = input.throttle;
   car.braking = input.brake > 0.1;
@@ -136,7 +136,10 @@ export function stepCar(car, input, track, dt, spec = SPEC) {
       // traction control: leave enough of the friction circle for the cornering in progress
       const latUse = Math.min(0.97, Math.abs(u * r) / Math.max(aLat, 1));
       const tc = input.handbrake ? 1 : Math.sqrt(1 - latUse * latUse);
-      Fdrive = input.throttle * Math.min(mu * (Fzf + Fzr) * 0.95 * Math.max(0.15, tc), power / Math.max(au, 3));
+      // traction limit per DRIVEN axle (a RWD car can only use the rear tyres' grip, FWD the front)
+      const rs = spec.rearDrive, fs = 1 - rs;
+      const capDrive = Math.min(rs > 0.01 ? mu * spec.rearGrip * Fzr * 0.95 / rs : Infinity, fs > 0.01 ? mu * Fzf * 0.95 / fs : Infinity);
+      Fdrive = input.throttle * Math.min(capDrive * Math.max(0.15, tc), power / Math.max(au, 3));
     }
     if (wantsNitro) Fdrive += spec.nitroForce;
     let Fbrake = 0;
@@ -233,7 +236,7 @@ export function stepCar(car, input, track, dt, spec = SPEC) {
 }
 
 /** AI driver: pure-pursuit steering + speed table throttle control. */
-export function aiInput(car, track, speedTable, cars, spec = SPEC, dt = 1 / 120) {
+export function aiInput(car, track, speedTable, cars, spec = car.spec || SPEC, dt = 1 / 120) {
   const { N, ds } = track;
   const i = car.idx < 0 ? 0 : car.idx;
   const v = Math.max(0, car.speed);

@@ -23,7 +23,14 @@ const state = (page) => page.evaluate(() => window.__game.getState());
 const simulate = (page, seconds, opts = {}) =>
   page.evaluate(([s, o]) => window.__game.simulate(s, o), [seconds, opts]);
 
+/** Home -> garage via the Grand Prix / Time Trial pill. */
+async function garage(page, mode = 'race') {
+  await page.click(mode === 'trial' ? '#tt-btn' : '#gp-btn');
+  await expect(page.locator('#garage')).toBeVisible();
+}
+
 async function startAndWaitForGreen(page) {
+  if (!(await page.locator('#garage').isVisible())) await garage(page);
   await page.click('#start-btn');
   await expect(page.locator('#hud')).toBeVisible();
   // skip the 3 s countdown deterministically
@@ -38,7 +45,9 @@ test.afterEach(async () => { expect(errors, errors.join('\n')).toEqual([]); });
 test('boots, renders a lit 3D scene and shows the main menu', async ({ page }) => {
   await boot(page, '?quality=high');
   await expect(page).toHaveTitle('Kurv Race');
-  await expect(page.locator('.title').first()).toContainText('KURV');
+  await expect(page.locator('#home .logo')).toContainText('KURV');
+  await expect(page.locator('#gp-btn')).toBeVisible();
+  await expect(page.locator('#tt-btn')).toBeVisible();
   await expect(page.locator('#loading')).toBeHidden();
 
   const pix = await page.evaluate(() => window.__game.snapshotStats());
@@ -54,6 +63,8 @@ test('boots, renders a lit 3D scene and shows the main menu', async ({ page }) =
 
 test('menu options are interactive and persist across reloads', async ({ page }) => {
   await boot(page);
+  await garage(page);
+  await page.click('#color-btn');
   const silver = page.locator('.swatch[data-v="12106946"]'); // 0xb8bcc2
   await silver.click();
   await expect(silver).toHaveAttribute('aria-pressed', 'true');
@@ -66,6 +77,7 @@ test('menu options are interactive and persist across reloads', async ({ page })
 
   await page.reload();
   await page.waitForSelector('body[data-ready="1"]');
+  await garage(page);
   await expect(page.locator('.swatch[data-v="12106946"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#difficulty button[data-v="hard"]')).toHaveAttribute('aria-pressed', 'true');
 
@@ -78,7 +90,9 @@ test('menu options are interactive and persist across reloads', async ({ page })
 
 test('countdown runs in real time, then keyboard controls drive the car', async ({ page }) => {
   await boot(page);
-  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter'); // home -> garage
+  await expect(page.locator('#garage')).toBeVisible();
+  await page.keyboard.press('Enter'); // garage -> race
   await expect(page.locator('#hud')).toBeVisible();
   await expect(page.locator('#countdown')).toHaveText(/^[123]$/);
   expect((await state(page)).raceState).toBe('countdown');
@@ -110,7 +124,8 @@ test('countdown runs in real time, then keyboard controls drive the car', async 
 
 test('sound: engine recordings load and music follows menu -> race -> final lap', async ({ page }) => {
   await boot(page);
-  await page.click('#laps button[data-v="1"]'); // first tap unlocks audio -> menu music
+  await page.click('#gp-btn'); // first tap unlocks audio -> menu music
+  await page.click('#laps button[data-v="1"]');
   await expect.poll(async () => (await state(page)).audio.music, { timeout: 30_000 }).toBe('menu');
   await page.click('#start-btn');
   await expect.poll(async () => (await state(page)).audio.engineSamples, { timeout: 30_000 }).toBe(true);
@@ -129,6 +144,53 @@ test('sound: engine recordings load and music follows menu -> race -> final lap'
   await page.click('#music-btn');
   await expect(page.locator('#music-btn')).toHaveText('Music: Off');
   expect((await state(page)).audio.musicOn).toBe(false);
+});
+
+test('garage: each car has its own stats, body and physics', async ({ page }) => {
+  await boot(page);
+  await garage(page);
+  await expect(page.locator('#car-name')).toHaveText('STRADA GT');
+  const speedBar = () => page.locator('.segbar[data-stat="speed"]').getAttribute('data-value');
+  const gtTop = Number(await speedBar());
+  await page.click('#car-next');
+  await expect(page.locator('#car-name')).toHaveText('VENTO R');
+  expect(Number(await speedBar())).toBeGreaterThan(gtTop);       // the hypercar is faster
+  await expect(page.locator('#stats')).toContainText('km/h');
+  await page.click('#car-next'); await page.click('#car-next');
+  await expect(page.locator('#car-name')).toHaveText('KEI SPRINT');
+  await page.click('#car-next');
+  await expect(page.locator('#car-name')).toHaveText('STRADA GT'); // wraps around
+  await page.click('#car-prev');
+  await expect(page.locator('#car-name')).toHaveText('KEI SPRINT');
+
+  // the chosen car is the one that races, with its own (slower) top speed
+  await page.click('#start-btn');
+  await simulate(page, 3.1, { autopilot: false });
+  expect((await state(page)).player.model).toBe('kei');
+  await page.evaluate(() => window.__game.teleport(0));
+  const kei = await simulate(page, 2.5, { autopilot: false, input: { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false } });
+  await page.evaluate(() => document.getElementById('quit-btn').click());
+  await page.click('#car-next'); // -> Strada GT
+  await page.click('#start-btn');
+  await simulate(page, 3.1, { autopilot: false });
+  await page.evaluate(() => window.__game.teleport(0));
+  const gt = await simulate(page, 2.5, { autopilot: false, input: { throttle: 1, brake: 0, steer: 0, handbrake: false, nitro: false } });
+  expect(gt.player.model).toBe('gt');
+  expect(gt.player.speed).toBeGreaterThan(kei.player.speed + 2); // GT out-accelerates the hatch
+});
+
+test('settings window: graphics and sound options', async ({ page }) => {
+  await boot(page);
+  await page.click('#settings-btn');
+  await expect(page.locator('#settings')).toBeVisible();
+  await page.click('#quality button[data-v="high"]');
+  await expect(page.locator('#quality button[data-v="high"]')).toHaveAttribute('aria-pressed', 'true');
+  expect((await state(page)).quality).toBe('high');
+  const muted = (await state(page)).muted;
+  await page.click('#set-sound');
+  expect((await state(page)).muted).toBe(!muted);
+  await page.click('#settings-close');
+  await expect(page.locator('#settings')).toBeHidden();
 });
 
 test('pause freezes the race clock and resume continues it', async ({ page }) => {
@@ -180,7 +242,7 @@ test('hotkeys: camera cycle, mute toggle and car reset', async ({ page }) => {
 
 test('barriers contain the car and slow it on impact', async ({ page }) => {
   await boot(page);
-  await page.click('#mode button[data-v="trial"]');
+  await garage(page, 'trial');
   await startAndWaitForGreen(page);
   expect((await state(page)).cars).toHaveLength(1);
   // floor it while steering hard right into the barrier, sampling every step
@@ -199,7 +261,7 @@ test('barriers contain the car and slow it on impact', async ({ page }) => {
 
 test('time trial: solo lap shows a TIME TRIAL result', async ({ page }) => {
   await boot(page);
-  await page.click('#mode button[data-v="trial"]');
+  await garage(page, 'trial');
   await page.click('#laps button[data-v="1"]');
   await startAndWaitForGreen(page);
   const s = await simulate(page, 75, { autopilot: true });
@@ -212,7 +274,7 @@ test('time trial: solo lap shows a TIME TRIAL result', async ({ page }) => {
 
 test('nitro gives a measurable speed boost and drains the tank', async ({ page }) => {
   await boot(page);
-  await page.click('#mode button[data-v="trial"]'); // solo, so no rivals get in the way
+  await garage(page, 'trial'); // solo, so no rivals get in the way
   const run = async (nitro) => {
     await page.evaluate(() => document.getElementById('start-btn').click());
     await simulate(page, 3.1, { autopilot: false });
@@ -252,6 +314,7 @@ test('driving the wrong way shows a warning', async ({ page }) => {
 
 test('full race: finishing shows results, records best times, and can restart', async ({ page }) => {
   await boot(page);
+  await garage(page);
   await page.click('#laps button[data-v="1"]');
   await startAndWaitForGreen(page);
   await expect(page.locator('#hud-lap')).toHaveText('LAP 1/1');
@@ -274,10 +337,12 @@ test('full race: finishing shows results, records best times, and can restart', 
   expect(stored.lap).toBeCloseTo(s.player.lapTimes[0], 3);
   expect(stored.race1).toBeCloseTo(s.player.finishTime, 3);
 
-  await page.click('#menu-btn');
-  await expect(page.locator('#menu')).toBeVisible();
+  await page.click('#menu-btn'); // back to the garage
+  await expect(page.locator('#garage')).toBeVisible();
+  await page.click('#back-btn');
   await expect(page.locator('#best-label')).toContainText('BEST LAP');
 
+  await garage(page);
   await page.click('#start-btn');
   await expect(page.locator('#results')).toBeHidden();
   expect((await state(page)).raceState).toBe('countdown');
@@ -292,6 +357,7 @@ test('touch controls work on a phone-sized screen', async ({ browser }) => {
   expect(overflow).toBeLessThanOrEqual(0);
   expect((await state(page)).touch).toBe(true);
 
+  await garage(page);
   await page.click('#start-btn');
   await expect(page.locator('#t-gas')).toBeVisible();
   await expect(page.locator('#t-left')).toBeVisible();
@@ -328,9 +394,25 @@ for (const [name, extra] of PHONES) {
     const page = await ctx.newPage();
     const errs = trackErrors(page);
     await boot(page);
+    await garage(page);
 
-    // menu: the option buttons in each row are the same height (no wrapped labels)
-    const heights = await page.evaluate(() => [...document.querySelectorAll('.seg')].map((seg) =>
+    // garage: every control fits on screen without covering another one
+    const g = await page.evaluate(() => {
+      const ids = ['#back-btn', '#color-btn', '#car-name', '#car-prev', '#car-next', '#stats', '#mode', '#difficulty', '#laps', '#start-btn'];
+      const R = ids.map((id) => [id, document.querySelector(id).getBoundingClientRect()]);
+      const overlaps = [];
+      for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
+        const a = R[i][1], b = R[j][1];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlaps.push(`${R[i][0]} x ${R[j][0]}`);
+      }
+      const offscreen = R.filter(([, a]) => a.left < 0 || a.top < 0 || a.right > innerWidth || a.bottom > innerHeight).map(([id]) => id);
+      return { overlaps, offscreen };
+    });
+    expect(g.overlaps).toEqual([]);
+    expect(g.offscreen).toEqual([]);
+
+    // the option buttons in each row are the same height (no wrapped labels)
+    const heights = await page.evaluate(() => [...document.querySelectorAll('#garage .seg')].map((seg) =>
       [...seg.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().height))));
     for (const row of heights) expect(new Set(row).size, JSON.stringify(heights)).toBe(1);
 
