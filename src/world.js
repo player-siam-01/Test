@@ -202,7 +202,14 @@ export function buildWorld(scene, renderer, track) {
 
   // Real HDR lighting + reflections; the sun light is aimed at the HDR's sun
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const hdrReady = new RGBELoader(manager).setDataType(THREE.FloatType).loadAsync('./assets/sky_1k.hdr').then((hdr) => {
+  // (the .hdr is shipped base64-encoded inside JSON so any static host will serve it)
+  manager.itemStart('sky-hdr');
+  const hdrReady = fetch('./assets/sky_1k.hdr.json').then((r) => r.json()).then(({ base64 }) => {
+    const bin = atob(base64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes]));
+    return new RGBELoader().setDataType(THREE.FloatType).loadAsync(url).finally(() => URL.revokeObjectURL(url));
+  }).then((hdr) => {
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     const { data, width, height } = hdr.image;
     let best = 0, bi = 0;
@@ -217,6 +224,7 @@ export function buildWorld(scene, renderer, track) {
     scene.environment = pmrem.fromEquirectangular(hdr).texture;
     scene.environmentIntensity = 1.0;
     hdr.dispose(); pmrem.dispose();
+    manager.itemEnd('sky-hdr');
   });
 
   // ------------------------------------------------------------ ground
