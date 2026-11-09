@@ -208,6 +208,7 @@ export function stepCar(car, input, track, dt, spec = car.spec || SPEC) {
     const sx = track.sx[loc.i] * sgn, sz = track.sz[loc.i] * sgn;
     const pen = Math.abs(loc.lat) - lim;
     car.x -= sx * pen; car.z -= sz * pen;
+    loc.lat = sgn * lim; // report the corrected (clamped) position, not the penetration
     const vn = vx * sx + vz * sz;
     if (vn > 0) {
       vx -= sx * vn * 1.35; vz -= sz * vn * 1.35;
