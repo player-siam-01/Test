@@ -2,17 +2,29 @@
 // loop and in the headless fixed-step simulation used by the E2E tests.
 import { ROAD_HALF, CURB_WIDTH, WALL_DIST, locate, pointAt, wrap } from './track.js';
 
+// Vehicle model: a "bicycle" (single-track) model with non-linear tyres,
+// load transfer, downforce, AWD with a rear bias, and a light stability assist.
+// Numbers are roughly those of a modern AWD supercar.
 export const SPEC = {
-  maxSpeed: 70,      // m/s (~252 km/h)
-  engine: 24,        // m/s^2 at standstill
-  brake: 40,
+  mass: 1250,          // kg
+  inertia: 1750,       // yaw inertia, kg m^2
+  a: 1.2, b: 1.4,      // CG to front / rear axle, m
+  cgHeight: 0.38,      // m (longitudinal load transfer)
+  rearGrip: 1.1,       // wider rear tyres: keeps the car stable on the brakes
+  mu: 1.35,            // tyre friction (sport semi-slicks)
+  cf: 95000, cr: 125000, // cornering stiffness, N/rad (front softer = mild understeer)
+  power: 420000,       // W
+  drag: 1.13,          // aero drag factor, N/(m/s)^2  -> ~255 km/h top speed
+  rolling: 250,        // N
+  rearDrive: 0.65,     // share of drive torque to the rear axle (power oversteer)
+  brakeG: 1.15,        // braking, in g
+  downforce: 0.55,     // N/(m/s)^2
+  maxSteer: 0.6,       // rad at walking pace (reduced with speed)
   reverseMax: 14,
-  maxTurn: 2.4,      // rad/s at low speed
-  grip: 7.5,
-  driftGrip: 1.4,
-  nitroBoost: 16,
-  nitroDuration: 3.2, // seconds for a full tank
-  nitroRegen: 1 / 16, // tank per second
+  nitroForce: 7000,    // N
+  nitroDuration: 3.2,  // seconds for a full tank
+  nitroRegen: 1 / 16,  // tank per second
+  maxSpeed: 71,        // approx. top speed without nitro, m/s (camera/HUD scaling)
 };
 
 export const CAR_RADIUS = 1.35;
@@ -46,22 +58,23 @@ export class Car {
   get progress() { return this.lapCounter * 1e5 + this.progressF; }
 }
 
-/** Speed the AI can carry at every sample, with a braking back-pass. */
+/** Speed the AI can carry at every sample (grip + downforce limit), with a braking back-pass. */
 export function buildSpeedTable(track, spec = SPEC) {
   const { N, ds } = track;
   const raw = new Float32Array(N);
+  const g = 9.81;
   for (let i = 0; i < N; i++) {
     let c = 0;
     for (let k = -6; k <= 6; k++) c = Math.max(c, Math.abs(track.curv[wrap(i + k, N)]));
     const R = c > 1e-5 ? 1 / c : 1e5;
     let v = 8;
-    for (let t = 8; t <= spec.maxSpeed * 1.3; t += 0.5) {
-      const omega = spec.maxTurn * (1 - 0.5 * Math.min(1, t / spec.maxSpeed));
-      if (t <= 0.62 * omega * R) v = t; else break;
+    for (let t = 8; t <= spec.maxSpeed * 1.25; t += 0.5) {
+      const aLat = spec.mu * (g + spec.downforce * t * t / spec.mass);
+      if (t * t <= 0.9 * aLat * R) v = t; else break;
     }
     raw[i] = v;
   }
-  const decel = 24;
+  const decel = spec.brakeG * g * 0.7; // AI finishes most braking before turning in
   for (let pass = 0; pass < 2; pass++) {
     for (let j = 2 * N - 1; j >= 0; j--) {
       const i = j % N, n = (i + 1) % N;
@@ -77,69 +90,117 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * Advance one car by dt seconds.
  * input: { throttle 0..1, brake 0..1, steer -1..1 (+right), handbrake, nitro }
  */
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+
 export function stepCar(car, input, track, dt, spec = SPEC) {
-  car.steer += (input.steer - car.steer) * Math.min(1, dt * 9);
+  car.steer += (input.steer - car.steer) * Math.min(1, dt * 8);
   car.throttle = input.throttle;
   car.braking = input.brake > 0.1;
   const N = track.N;
 
-  let fx = Math.sin(car.heading), fz = Math.cos(car.heading);
-  let rx = -fz, rz = fx;
-  let vF = car.vx * fx + car.vz * fz;
-  let vL = car.vx * rx + car.vz * rz;
-
   const loc0 = locate(track, car.x, car.z, car.idx);
-  const absLat = Math.abs(loc0.lat);
-  car.offroad = absLat > ROAD_HALF + CURB_WIDTH * 0.7;
+  car.offroad = !track.open && Math.abs(loc0.lat) > ROAD_HALF + CURB_WIDTH * 0.7; // track.open: test-only open field
+
+  let fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  // body-frame velocity: u forward, v to the LEFT; r = yaw rate (+ = turning left)
+  let u = car.vx * fx + car.vz * fz;
+  let v = car.vx * fz - car.vz * fx;
+  let r = car.yawRate || 0;
 
   // Nitro
-  const wantsNitro = input.nitro && car.nitro > 0.02 && vF > 5;
+  const wantsNitro = input.nitro && car.nitro > 0.02 && u > 5;
   car.nitroActive = wantsNitro;
   if (wantsNitro) car.nitro = Math.max(0, car.nitro - dt / spec.nitroDuration);
   else car.nitro = Math.min(1, car.nitro + dt * spec.nitroRegen * (1 + Math.min(3, car.drift / 4)));
 
-  const maxV = spec.maxSpeed * car.skill * (car.offroad ? 0.5 : 1) * (wantsNitro ? 1.28 : 1);
+  const g = 9.81, m = spec.mass, A = spec.a, B = spec.b, L = A + B;
+  const mu = spec.mu * (car.offroad ? 0.65 : 1) * (0.92 + 0.08 * car.skill);
+  const power = spec.power * car.skill ** 3;
+  const SUB = 2, h = dt / SUB;
+  let delta = 0;
+  for (let sIdx = 0; sIdx < SUB; sIdx++) {
+    const au = Math.abs(u);
+    const df = spec.downforce * u * u;
+    const ax = car.ax || 0;
+    const Fzf = Math.max(0, m * g * B / L - m * ax * spec.cgHeight / L + df * 0.45);
+    const Fzr = Math.max(0, m * g * A / L + m * ax * spec.cgHeight / L + df * 0.55);
+    // speed-sensitive steering that tops out a little past the grip limit
+    const aLat = mu * (Fzf + Fzr) / m;
+    const dGrip = au > 1 ? Math.atan(L * aLat / (au * au)) + 0.05 : spec.maxSteer;
+    const dMax = Math.min(spec.maxSteer / (1 + au / 12), dGrip * 1.3);
+    delta = -car.steer * dMax; // + = left
 
-  // Longitudinal
-  if (input.throttle > 0 && vF > -1) {
-    const r = Math.max(0, vF) / maxV;
-    vF += input.throttle * spec.engine * Math.max(0, 1 - r * r) * dt;
+    // drive, brakes, resistance
+    let Fdrive = 0;
+    if (input.throttle > 0 && u > -0.5) {
+      // traction control: leave enough of the friction circle for the cornering in progress
+      const latUse = Math.min(0.97, Math.abs(u * r) / Math.max(aLat, 1));
+      const tc = input.handbrake ? 1 : Math.sqrt(1 - latUse * latUse);
+      Fdrive = input.throttle * Math.min(mu * (Fzf + Fzr) * 0.95 * Math.max(0.15, tc), power / Math.max(au, 3));
+    }
+    if (wantsNitro) Fdrive += spec.nitroForce;
+    let Fbrake = 0;
+    if (input.brake > 0) {
+      if (u > 0.5) Fbrake = input.brake * spec.brakeG * m * g * (car.offroad ? 0.7 : 1);
+      else if (u > -spec.reverseMax) Fdrive -= input.brake * m * 5; // reverse gear
+    }
+    let Fhb = 0;
+    if (input.handbrake && au > 0.5) Fhb = 0.3 * mu * Fzr;
+    const sgnU = Math.sign(u) || 0;
+    // 70/30 brake bias; rear brake force is ABS-limited so it never locks the rear
+    const FbR = Math.min(Fbrake * 0.3, 0.55 * mu * Fzr);
+    const FxF = Fdrive * (1 - spec.rearDrive) - (Fbrake - FbR) * sgnU;
+    const FxR = Fdrive * spec.rearDrive - FbR * sgnU - Fhb * sgnU;
+    const resist = spec.drag * u * au + spec.rolling * sgnU + (car.offroad ? m * 2.2 * sgnU : 0);
+
+    // tyre lateral forces, limited by the friction circle left over after drive/brake
+    const capF = Math.max(0.12 * mu * Fzf, Math.sqrt(Math.max(0, (mu * Fzf) ** 2 - FxF * FxF)));
+    const muR = mu * spec.rearGrip;
+    const capR = Math.max(0.12 * muR * Fzr, Math.sqrt(Math.max(0, (muR * Fzr) ** 2 - FxR * FxR))) * (input.handbrake ? 0.35 + 0.3 * Math.min(1, au / 45) : 1); // gentler at speed
+    const k = u > 0 ? smoothstep(1.5, 5, u) : 0; // blend to a kinematic model at walking pace / reverse
+    let FyF = 0, FyR = 0;
+    if (k > 0) {
+      const alphaF = delta - Math.atan2(v + A * r, au);
+      const alphaR = -Math.atan2(v - B * r, au);
+      FyF = capF * Math.tanh(spec.cf * alphaF / capF);
+      FyR = capR * Math.tanh(spec.cr * alphaR / capR);
+    }
+    const cd = Math.cos(delta), sd = Math.sin(delta);
+    let du = (FxF * cd - FyF * sd + FxR - resist) / m + v * r;
+    let dv = (FyF * cd + FxF * sd + FyR) / m - u * r;
+    let dr = (A * (FyF * cd + FxF * sd) - B * FyR) / spec.inertia;
+    // stability assist (off while the handbrake is held, so drifts stay possible)
+    if (k > 0 && !input.handbrake) {
+      const rT = clamp(u * Math.tan(delta) / L, -aLat / Math.max(au, 1), aLat / Math.max(au, 1));
+      const err = rT - r;
+      dr += err * (1.6 + Math.min(4, Math.abs(err) * 3)) * k; // stronger the further it rotates past the target
+      const beta = Math.atan2(Math.abs(v), au);
+      if (beta > 0.2) dv -= v * 2.5 * k;
+    }
+    const uPrev = u;
+    u += du * h; v += dv * h; r += dr * h;
+    if (Fbrake > 0 && uPrev > 0 && u < 0) u = 0; // brakes stop the car, they don't reverse it
+    if (k < 1) { // low speed: kinematic steering, no sliding
+      const rK = u * Math.tan(delta) / L;
+      r = r * k + rK * (1 - k);
+      v *= k;
+    }
+    car.ax = (car.ax || 0) + (du - (car.ax || 0)) * 0.25;
+    car.heading += r * h;
   }
-  if (wantsNitro) vF += spec.nitroBoost * dt * (vF < maxV ? 1 : 0);
-  if (vF > maxV) vF -= (vF - maxV) * 1.6 * dt;
-  if (input.brake > 0) {
-    if (vF > 0.5) vF = Math.max(0, vF - spec.brake * input.brake * dt);
-    else vF = Math.max(-spec.reverseMax, vF - spec.engine * 0.6 * input.brake * dt);
-  }
-  vF -= vF * (0.12 + (car.offroad ? 0.9 : 0) + (input.handbrake ? 0.5 : 0)) * dt;
-  if (!input.throttle && !input.brake && Math.abs(vF) < 0.3) vF = 0;
-
-  // Steering / yaw
-  const speedFactor = Math.min(1, Math.abs(vF) / spec.maxSpeed);
-  const ramp = Math.min(1, Math.abs(vF) / 7);
-  const omega = car.steer * spec.maxTurn * ramp * (1 - 0.5 * speedFactor) *
-    (input.handbrake ? 1.4 : 1) * Math.sign(vF || 0);
-  // velocity in world before rotating the chassis
-  let vx = fx * vF + rx * vL, vz = fz * vF + rz * vL;
-  car.heading -= omega * dt;
-  fx = Math.sin(car.heading); fz = Math.cos(car.heading); rx = -fz; rz = fx;
-  vF = vx * fx + vz * fz;
-  vL = vx * rx + vz * rz;
-  const grip = input.handbrake ? spec.driftGrip : car.offroad ? spec.grip * 0.55 : spec.grip;
-  const keep = Math.exp(-grip * dt);
-  // part of the scrubbed lateral speed is converted back to forward speed
-  vF += Math.abs(vL) * (1 - keep) * 0.25 * Math.sign(vF || 1);
-  vL *= keep;
-
-  car.drift = Math.abs(vL);
-  vx = fx * vF + rx * vL; vz = fz * vF + rz * vL;
+  if (!input.throttle && !input.brake && Math.abs(u) < 0.3) u = 0;
+  car.yawRate = r;
+  car.steerAngle = delta;
+  car.drift = Math.abs(v);
+  fx = Math.sin(car.heading); fz = Math.cos(car.heading);
+  let vx = fx * u + fz * v, vz = fz * u - fx * v;
   car.x += vx * dt; car.z += vz * dt;
 
   // Barrier collision
   car.wallImpact = 0;
   const loc = locate(track, car.x, car.z, loc0.i);
   const lim = WALL_DIST - 1.1;
-  if (Math.abs(loc.lat) > lim) {
+  if (!track.open && Math.abs(loc.lat) > lim) {
     const sgn = Math.sign(loc.lat);
     const sx = track.sx[loc.i] * sgn, sz = track.sz[loc.i] * sgn;
     const pen = Math.abs(loc.lat) - lim;
@@ -151,6 +212,7 @@ export function stepCar(car, input, track, dt, spec = SPEC) {
       const keep = 1 - Math.min(0.35, vn * 0.025);
       vx *= keep; vz *= keep;
       car.wallImpact = vn;
+      car.yawRate = (car.yawRate || 0) * 0.6;
     }
   }
   car.vx = vx; car.vz = vz;
@@ -171,10 +233,20 @@ export function stepCar(car, input, track, dt, spec = SPEC) {
 }
 
 /** AI driver: pure-pursuit steering + speed table throttle control. */
-export function aiInput(car, track, speedTable, cars, spec = SPEC) {
+export function aiInput(car, track, speedTable, cars, spec = SPEC, dt = 1 / 120) {
   const { N, ds } = track;
   const i = car.idx < 0 ? 0 : car.idx;
   const v = Math.max(0, car.speed);
+
+  // stuck recovery: after a spin into the wall, back out with opposite lock
+  if (car.reverseTimer > 0) {
+    car.reverseTimer -= dt;
+    const tx = track.tx[i], tz = track.tz[i];
+    const cross = Math.sin(car.heading) * tz - Math.cos(car.heading) * tx; // >0: pointing left of the track
+    return { throttle: 0, brake: 1, steer: cross > 0 ? -1 : 1, handbrake: false, nitro: false };
+  }
+  if (Math.abs(car.speed) < 2) car.stuckTime = (car.stuckTime || 0) + dt; else car.stuckTime = 0;
+  if (car.stuckTime > 1.2) { car.stuckTime = 0; car.reverseTimer = 1.1; car.stuckCount = (car.stuckCount || 0) + 1; }
 
   // racing line: drift toward the inside of upcoming corners
   const ahead = wrap(i + Math.round(35 / ds), N);
@@ -197,15 +269,21 @@ export function aiInput(car, track, speedTable, cars, spec = SPEC) {
   const look = 9 + v * 0.42;
   const t = pointAt(track, car.progressF + look / ds, offset);
   const dx = t.x - car.x, dz = t.z - car.z;
-  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  // aim along the direction of travel (not the nose), so body slip doesn't fool the driver
+  const sp = Math.hypot(car.vx, car.vz);
+  const dirH = sp > 3 ? Math.atan2(car.vx, car.vz) : car.heading;
+  const fx = Math.sin(dirH), fz = Math.cos(dirH);
   const lx = dx * -fz + dz * fx;       // right component
   const lz = dx * fx + dz * fz;        // forward component
   const ang = Math.atan2(lx, lz);
-  const steer = clamp(ang * 2.4, -1, 1);
+  // proportional steering + yaw-rate damping (counter-steer when rotating too fast)
+  const steer = clamp(ang * 1.6 + (car.yawRate || 0) * 0.18, -1, 1);
 
-  const target = speedTable[wrap(i + 4, N)] * car.skill;
+  const target = speedTable[wrap(i + 4, N)] * Math.min(1, car.skill);
   let throttle = 0, brake = 0;
-  if (v < target - 0.5) throttle = 1;
+  // ease off while the car is still sliding (lets the tyres hook up again)
+  const slide = Math.min(1, Math.max(0, (car.drift - 2) / 4));
+  if (v < target - 0.5) throttle = 1 - 0.6 * slide;
   else if (v < target + 1) throttle = 0.35;
   if (v > target + 2.5) brake = clamp((v - target) / 10, 0.2, 1);
   if (Math.abs(ang) > 1.2) { throttle = 0.6; }

@@ -179,7 +179,7 @@ test('time trial: solo lap shows a TIME TRIAL result', async ({ page }) => {
   await page.click('#mode button[data-v="trial"]');
   await page.click('#laps button[data-v="1"]');
   await startAndWaitForGreen(page);
-  const s = await simulate(page, 40, { autopilot: true });
+  const s = await simulate(page, 75, { autopilot: true });
   expect(s.mode).toBe('trial');
   expect(s.player.finished).toBe(true);
   await expect(page.locator('#results')).toBeVisible({ timeout: 20_000 });
@@ -233,11 +233,12 @@ test('full race: finishing shows results, records best times, and can restart', 
   await startAndWaitForGreen(page);
   await expect(page.locator('#hud-lap')).toHaveText('LAP 1/1');
 
-  const s = await simulate(page, 45, { autopilot: true });
+  // realistic grip: a lap of this tight circuit takes ~45-50 s
+  const s = await simulate(page, 75, { autopilot: true });
   expect(s.player.finished).toBe(true);
   expect(s.player.lapTimes).toHaveLength(1);
-  expect(s.player.finishTime).toBeGreaterThan(15);
-  expect(s.player.finishTime).toBeLessThan(45);
+  expect(s.player.finishTime).toBeGreaterThan(30);
+  expect(s.player.finishTime).toBeLessThan(75);
 
   const results = page.locator('#results');
   await expect(results).toBeVisible({ timeout: 20_000 });

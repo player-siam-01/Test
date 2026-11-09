@@ -113,7 +113,10 @@ export class Race {
       let input;
       if (car.isPlayer && !autopilot && !car.finished) input = playerInput;
       else {
-        input = aiInput(car, this.track, this.speedTable, this.cars);
+        input = aiInput(car, this.track, this.speedTable, this.cars, undefined, dt);
+        // last resort for AI: stuck for 6 s -> put back on the racing line
+        car.slowTime = Math.abs(car.speed) < 3 ? (car.slowTime || 0) + dt : 0;
+        if (car.slowTime > 6) { this.respawn(car); car.slowTime = 0; car.reverseTimer = 0; }
         if (car.finished) { input.throttle *= 0.5; input.nitro = false; }
       }
       const before = car.lapCounter;
@@ -148,6 +151,7 @@ export class Race {
     const p = pointAt(this.track, Math.max(0, car.progressF), 0);
     car.x = p.x; car.z = p.z; car.heading = p.heading;
     car.vx = car.vz = car.speed = 0;
+    car.yawRate = 0;
     car.x0 = car.x; car.z0 = car.z; car.h0 = car.heading;
   }
 
