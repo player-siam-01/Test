@@ -57,9 +57,9 @@
   .pos { font-size: 56px; font-weight: 900; font-style: italic; line-height: .9; text-shadow: 0 0 18px rgba(255,43,214,.8); }
   .pos small { font-size: 22px; color: var(--dim); }
   .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-weight: 800; font-size: 15px;
-    letter-spacing: 1px; backdrop-filter: blur(6px); width: max-content; }
+    letter-spacing: 1px; width: max-content; }
   .board { list-style: none; margin: 4px 0 0; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 170px;
-    font-size: 13px; backdrop-filter: blur(6px); }
+    font-size: 13px; }
   .board li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; }
   .board li.me { background: rgba(255,43,214,.22); }
   .board .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 8px currentColor; background: currentColor; }
@@ -83,7 +83,7 @@
 
   /* ---------- Panels ---------- */
   .panel { width: min(460px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 26px;
-    backdrop-filter: blur(14px); box-shadow: 0 0 60px rgba(255,43,214,.25); text-align: center; }
+    background: rgba(14,7,32,.92); box-shadow: 0 0 60px rgba(255,43,214,.25); text-align: center; }
   .panel h2 { margin: 0 0 6px; font-size: 40px; font-style: italic; font-weight: 900; text-shadow: 0 0 20px var(--pink); }
   .panel .sub { color: var(--dim); margin-bottom: 18px; }
   .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
@@ -101,7 +101,7 @@
   .tbtn { position: absolute; width: var(--b); height: var(--b); border-radius: 50%; border: 2px solid rgba(255,255,255,.28);
     background: radial-gradient(circle at 50% 35%, rgba(60,40,90,.6), rgba(10,5,22,.7)); color: #fff;
     font-size: calc(var(--b) * .36); font-weight: 900; display: flex; align-items: center; justify-content: center; touch-action: none;
-    box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15); backdrop-filter: blur(4px); padding: 0; }
+    box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15); padding: 0; }
   .tbtn.on { background: radial-gradient(circle, rgba(255,43,214,.85), rgba(140,30,160,.7)); border-color: #fff; transform: scale(.94); }
   #t-left  { left: var(--m); bottom: var(--m); }
   #t-right { left: calc(var(--m) + var(--b) + var(--g)); bottom: var(--m); }

@@ -54,6 +54,7 @@ export class Race {
     this._acc = 0;
     // settle idx so lap logic starts clean
     for (const c of this.cars) stepCar(c, { throttle: 0, brake: 1, steer: 0 }, this.track, 0);
+    this.savePoses();
   }
 
   get player() { return this.cars[0]; }
@@ -82,7 +83,16 @@ export class Race {
     return steps;
   }
 
+  /** Fraction of a physics step left over after update(): used to interpolate rendering. */
+  get alpha() { return Math.min(1, this._acc / FIXED_DT); }
+
+  /** Remember each car's pose before a physics step (for smooth rendering). */
+  savePoses() {
+    for (const c of this.cars) { c.x0 = c.x; c.z0 = c.z; c.h0 = c.heading; c.w0 = c.wheelSpin; }
+  }
+
   step(dt, playerInput, autopilot) {
+    this.savePoses();
     if (this.state === 'countdown') {
       this.countdown -= dt;
       const n = Math.ceil(this.countdown);
@@ -138,6 +148,7 @@ export class Race {
     const p = pointAt(this.track, Math.max(0, car.progressF), 0);
     car.x = p.x; car.z = p.z; car.heading = p.heading;
     car.vx = car.vz = car.speed = 0;
+    car.x0 = car.x; car.z0 = car.z; car.h0 = car.heading;
   }
 
   drainEvents() { const e = this.events; this.events = []; return e; }

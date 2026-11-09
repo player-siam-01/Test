@@ -22,7 +22,10 @@ const store = {
 };
 
 const COLORS = [0xff2d6f, 0xffd21f, 0x22e0ff, 0x9b5cff, 0xf4f4f8, 0x18ff9a];
-const settings = Object.assign({ color: COLORS[0], difficulty: 'normal', laps: 3, mode: 'race', quality: 'high' }, store.get('nv-settings', {}));
+// phones and tablets start in the lighter graphics mode; computers in High
+const coarsePointer = matchMedia('(pointer: coarse)').matches;
+const settings = Object.assign({ color: COLORS[0], difficulty: 'normal', laps: 3, mode: 'race', quality: coarsePointer ? 'low' : 'high' },
+  store.get('nv-settings', {}));
 if (params.get('quality')) settings.quality = params.get('quality');
 if (params.get('laps')) settings.laps = +params.get('laps');
 let best = store.get('nv-best', {}); // { lap: seconds, ['race'+laps]: seconds }
@@ -80,20 +83,54 @@ composer.addPass(new OutputPass());
 const grade = new ShaderPass(GradeShader);
 composer.addPass(grade);
 
+// autoLevel 0..4: extra savings applied automatically when the device can't keep up
+let autoLevel = 0;
+const AUTO_SCALE = [1, 0.8, 0.66, 0.66, 0.55];
 function applyQuality() {
   const high = settings.quality === 'high';
-  // never render below 1.5x on high-DPI phones: 1x looks blocky on a 3x screen
-  renderer.setPixelRatio(Math.min(high ? 2 : 1.5, window.devicePixelRatio || 1));
-  bloom.enabled = true;
+  // never render below 1.5x on high-DPI phones unless we must: 1x looks blocky on a 3x screen
+  const base = Math.min(high ? 2 : 1.5, window.devicePixelRatio || 1);
+  renderer.setPixelRatio(Math.max(0.6, base * AUTO_SCALE[autoLevel]));
+  bloom.enabled = autoLevel < 4;
   bloom.strength = high ? 0.6 : 0.5;
   // MSAA is the costliest part on weak GPUs: 4x on High, off in Performance mode
-  const samples = high ? 4 : 0;
+  const samples = high && autoLevel < 2 ? 4 : 0;
   for (const rt of [composer.renderTarget1, composer.renderTarget2]) {
     if (rt.samples !== samples) { rt.samples = samples; rt.dispose(); }
   }
-  world.sun.castShadow = high;
-  renderer.shadowMap.enabled = high;
+  const shadows = high && autoLevel < 3;
+  world.sun.castShadow = shadows;
+  renderer.shadowMap.enabled = shadows;
   resize();
+}
+
+/**
+ * Watches the real frame rate in ~2.5 s windows. Below 48 FPS it steps the
+ * render cost down one level; if a step doesn't help (e.g. the phone is capped
+ * at 30 FPS by battery saver) it is undone and adaptation stops going down.
+ * Sustained 58+ FPS lets it step back up.
+ */
+const perf = { t: 0, n: 0, goodWindows: 0, floor: 0, lastDownFps: null, cooldown: 1.5 };
+function adaptQuality(realDt) {
+  if (realDt > 0.5 || document.hidden) return;
+  if (perf.cooldown > 0) { perf.cooldown -= realDt; return; }
+  perf.t += realDt; perf.n++;
+  if (perf.t < 2.5 || perf.n < 20) return;
+  const fps = perf.n / perf.t;
+  perf.t = 0; perf.n = 0;
+  if (perf.lastDownFps != null) {
+    const before = perf.lastDownFps;
+    perf.lastDownFps = null;
+    if (fps < before * 1.1) { // no real gain: undo and stop lowering further
+      autoLevel--; perf.floor = 99; applyQuality(); perf.cooldown = 1.5; return;
+    }
+  }
+  if (fps < 48 && autoLevel < 4 && perf.floor !== 99) {
+    perf.lastDownFps = fps;
+    autoLevel++; perf.goodWindows = 0; applyQuality(); perf.cooldown = 1.5;
+  } else if (fps > 58 && autoLevel > 0) {
+    if (++perf.goodWindows >= 3) { autoLevel--; perf.goodWindows = 0; applyQuality(); perf.cooldown = 1.5; }
+  } else perf.goodWindows = 0;
 }
 
 function resize() {
@@ -149,7 +186,7 @@ for (const btn of document.querySelectorAll('.tbtn')) {
   btn.addEventListener('lostpointercapture', off);
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
-const isTouch = params.has('touch') || matchMedia('(pointer: coarse)').matches;
+const isTouch = params.has('touch') || coarsePointer;
 if (isTouch) document.body.classList.add('touch');
 
 function readInput() {
@@ -205,7 +242,7 @@ for (const [id, key, conv] of [['mode', 'mode', String], ['difficulty', 'difficu
     const b = e.target.closest('button'); if (!b) return;
     settings[key] = conv(b.dataset.v);
     setPressed(el, settings[key]);
-    if (key === 'quality') applyQuality();
+    if (key === 'quality') { autoLevel = 0; perf.floor = 0; perf.lastDownFps = null; applyQuality(); }
     saveSettings();
     updateBestLabel();
   });
@@ -332,7 +369,8 @@ function handleEvents(events) {
 const camState = { pos: new THREE.Vector3(), look: new THREE.Vector3(), heading: 0, fov: 62 };
 let snapCamera = true;
 function updateCamera(dt, t) {
-  const p = race.player;
+  const p0 = race.player;
+  const p = { x: p0.rx ?? p0.x, z: p0.rz ?? p0.z, heading: p0.rh ?? p0.heading, speed: p0.speed, nitroActive: p0.nitroActive };
   if (ui === 'menu') {
     const a = t * 0.22 + 0.6;
     const target = new THREE.Vector3(p.x, 0.9, p.z);
@@ -434,23 +472,31 @@ function carEffects(car, view, dt) {
 
 let lastCount = null;
 let hudTick = 0;
+// only touch the DOM when the text actually changed (avoids per-frame layout work)
+const domCache = new Map();
+function setHTML(id, html) {
+  if (domCache.get(id) === html) return;
+  domCache.set(id, html);
+  $(id).innerHTML = html;
+}
+
 function updateHUD(dt) {
   const p = race.player;
   const standings = race.standings();
   const pos = standings.indexOf(p) + 1;
-  $('hud-pos').innerHTML = `${pos}<small>/${race.cars.length}</small>`;
+  setHTML('hud-pos', `${pos}<small>/${race.cars.length}</small>`);
   const lap = Math.min(race.laps, Math.max(1, p.lapCounter + 1));
-  $('hud-lap').textContent = p.finished ? 'FINISHED' : `LAP ${lap}/${race.laps}`;
+  setHTML('hud-lap', p.finished ? 'FINISHED' : `LAP ${lap}/${race.laps}`);
   const curLap = race.state === 'racing' ? race.time - p.lapStart : 0;
-  $('hud-time').textContent = fmt(p.finished ? p.finishTime : race.time);
+  setHTML('hud-time', fmt(p.finished ? p.finishTime : race.time));
   const last = p.lapTimes.length ? p.lapTimes[p.lapTimes.length - 1] : null;
   const bl = p.lapTimes.length ? Math.min(...p.lapTimes) : null;
-  $('hud-laps').innerHTML = `LAP ${fmt(p.finished ? last : curLap)}<br>LAST ${fmt(last)}<br>BEST ${fmt(bl ?? best.lap)}`;
+  setHTML('hud-laps', `LAP ${fmt(p.finished ? last : curLap)}<br>LAST ${fmt(last)}<br>BEST ${fmt(bl ?? best.lap)}`);
   hudTick -= dt;
   if (hudTick <= 0) {
     hudTick = 0.2;
     const leader = standings[0];
-    $('hud-board').innerHTML = standings.map((c, i) => {
+    setHTML('hud-board', standings.map((c, i) => {
       const col = '#' + c.color.toString(16).padStart(6, '0');
       let gap = 'LEADER';
       if (i > 0) {
@@ -461,7 +507,7 @@ function updateHUD(dt) {
         }
       }
       return `<li class="${c.isPlayer ? 'me' : ''}"><b>${i + 1}</b><span class="dot" style="color:${col}"></span>${c.name}<span class="gap">${gap}</span></li>`;
-    }).join('');
+    }).join(''));
     if (resultsShown) renderResults();
   }
   // countdown
@@ -479,6 +525,22 @@ function updateHUD(dt) {
   minimap.draw(race.cars);
 }
 
+// ---------------------------------------------------------------- smooth motion
+// Physics runs at a fixed 120 Hz; the screen refreshes at its own rate. Blending
+// between the last two physics poses removes the stutter of uneven step counts.
+function updateRenderPoses() {
+  const a = race.alpha;
+  for (const c of race.cars) {
+    if (c.x0 === undefined) { c.rx = c.x; c.rz = c.z; c.rh = c.heading; c.rw = c.wheelSpin; continue; }
+    c.rx = c.x0 + (c.x - c.x0) * a;
+    c.rz = c.z0 + (c.z - c.z0) * a;
+    let dh = c.heading - c.h0;
+    if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
+    c.rh = c.h0 + dh * a;
+    c.rw = c.w0 + (c.wheelSpin - c.w0) * a;
+  }
+}
+
 // ---------------------------------------------------------------- loop
 let last = performance.now(), elapsed = 0, frames = 0, fps = 60, fpsAcc = 0, fpsN = 0;
 let gearLabel = 'N';
@@ -488,6 +550,7 @@ function frame(now) {
   last = now; elapsed += dt; frames++;
   fpsAcc += realDt; fpsN++;
   if (fpsAcc > 0.5) { fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; }
+  if (ui === 'race' || ui === 'menu') adaptQuality(realDt);
 
   const active = ui === 'race' || ui === 'results';
   if (active) {
@@ -495,6 +558,7 @@ function frame(now) {
     handleEvents(race.drainEvents());
   }
   const vdt = ui === 'paused' ? 0 : dt;
+  updateRenderPoses();
   race.cars.forEach((c, i) => carEffects(c, carViews[i], vdt));
   smoke.update(vdt); sparks.update(vdt);
   updateCamera(dt, elapsed);
@@ -518,7 +582,7 @@ window.__game = {
     const p = race.player;
     return {
       ui, mode: race.mode, raceState: race.state, time: race.time, countdown: race.countdown, laps: race.laps, difficulty: race.difficulty,
-      camera: CAMERAS[camMode], muted: audio.muted, quality: settings.quality, fps, frames, touch: isTouch,
+      camera: CAMERAS[camMode], muted: audio.muted, quality: settings.quality, autoLevel, fps, frames, touch: isTouch,
       position: race.positionOf(p),
       player: { x: p.x, z: p.z, heading: p.heading, speed: p.speed, kmh: Math.abs(p.speed) * 3.6, lap: p.lapCounter + 1,
         lapCounter: p.lapCounter, nitro: p.nitro, nitroActive: p.nitroActive, drift: p.drift, offroad: p.offroad, lat: p.lat,
@@ -565,8 +629,11 @@ window.__game = {
 // ---------------------------------------------------------------- boot
 applyQuality();
 syncMenu();
-// compile shaders once before revealing the menu
+// compile every shader up front (incl. nitro flames, hidden until used) so the
+// first nitro / first smoke never causes a hitch mid-race
+for (const v of carViews) for (const f of v.flames) f.visible = true;
 renderer.compile(scene, camera);
+for (const v of carViews) for (const f of v.flames) f.visible = false;
 $('loading').classList.add('hidden');
 show('menu', true);
 document.body.dataset.ready = '1';

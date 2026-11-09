@@ -492,7 +492,8 @@ export function buildWorld(scene, renderer, track) {
       // keep shadow frustum around the focus point
       sun.target.position.set(focus.x, 0, focus.z);
       sun.position.set(focus.x + SUN_DIR.x * 150, SUN_DIR.y * 150 + 60, focus.z + SUN_DIR.z * 150);
-      // cheering crowd
+      // cheering crowd (skipped when the grandstand is far away: saves CPU + GPU upload)
+      if (camPos && Math.hypot(camPos.x + 30, camPos.z + 95) > 260) return;
       const { mesh, base } = crowdAnim;
       for (let k = 0; k < base.length; k += 1) {
         const b = base[k];

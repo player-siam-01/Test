@@ -356,9 +356,10 @@ export function buildCar(color) {
     setColor(c) { paint.color.set(c); glowMat.color.set(c).multiplyScalar(1.1); },
     /** Sync with simulation state. */
     sync(state, dt, t) {
-      car.position.set(state.x, 0, state.z);
-      car.rotation.y = state.heading;
-      for (const w of wheels) w.rotation.x = state.wheelSpin;
+      // rx/rz/rh/rw: pose interpolated between physics steps (falls back to raw state)
+      car.position.set(state.rx ?? state.x, 0, state.rz ?? state.z);
+      car.rotation.y = state.rh ?? state.heading;
+      for (const w of wheels) w.rotation.x = state.rw ?? state.wheelSpin;
       for (const p of steerPivots) p.rotation.y = -state.steer * 0.45;
       const roll = THREE.MathUtils.clamp(state.steer * Math.min(1, Math.abs(state.speed) / 40) * 0.045 + (state.driftSign || 0) * 0.025, -0.08, 0.08);
       const pitch = state.braking ? 0.022 : state.throttle > 0 ? -0.012 : 0;
