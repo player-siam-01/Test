@@ -107,23 +107,23 @@ function applyQuality() {
 /**
  * Watches the real frame rate in ~2.5 s windows. Below 48 FPS it steps the
  * render cost down one level; if a step doesn't help (e.g. the phone is capped
- * at 30 FPS by battery saver) it is undone and adaptation stops going down.
+ * at 30 FPS by battery saver) adaptation stops going down.
  * Sustained 58+ FPS lets it step back up.
  */
 const perf = { t: 0, n: 0, goodWindows: 0, floor: 0, lastDownFps: null, cooldown: 1.5 };
 function adaptQuality(realDt) {
-  if (realDt > 0.5 || document.hidden) return;
+  if (realDt > 2 || document.hidden) return; // ignore app-switch pauses, not slow frames
   if (perf.cooldown > 0) { perf.cooldown -= realDt; return; }
   perf.t += realDt; perf.n++;
-  if (perf.t < 2.5 || perf.n < 20) return;
+  if (perf.t < 2.5 || perf.n < 5) return;
   const fps = perf.n / perf.t;
   perf.t = 0; perf.n = 0;
   if (perf.lastDownFps != null) {
     const before = perf.lastDownFps;
     perf.lastDownFps = null;
-    if (fps < before * 1.1) { // no real gain: undo and stop lowering further
-      autoLevel--; perf.floor = 99; applyQuality(); perf.cooldown = 1.5; return;
-    }
+    // no real gain (e.g. phone capped at 30 FPS by battery saver): keep this step
+    // but stop lowering further, so we never sacrifice quality for nothing
+    if (fps < before * 1.1) { perf.floor = 99; return; }
   }
   if (fps < 48 && autoLevel < 4 && perf.floor !== 99) {
     perf.lastDownFps = fps;
