@@ -8,12 +8,12 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M4 22h24l-3-7H9z' fill='%23ff2d6f'/><circle cx='10' cy='23' r='3' fill='%2322e0ff'/><circle cx='22' cy='23' r='3' fill='%2322e0ff'/></svg>">
 <style>
   :root {
-    --pink: #ff2bd6; --cyan: #22e0ff; --ink: #f4efff; --dim: rgba(244,239,255,.62);
-    --panel: rgba(12,6,28,.72); --line: rgba(255,255,255,.14);
+    --pink: #e10600; --cyan: #f2f2f2; --ink: #f5f5f7; --dim: rgba(245,245,247,.62);
+    --panel: rgba(14,14,18,.72); --line: rgba(255,255,255,.14);
     --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #07040f; color: var(--ink); font-family: var(--font);
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0b0f; color: var(--ink); font-family: var(--font);
     -webkit-user-select: none; user-select: none; touch-action: none; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
   .hidden { display: none !important; }
@@ -21,14 +21,14 @@
 
   /* ---------- Menu ---------- */
   .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 20; }
-  #menu { background: radial-gradient(ellipse at 50% 120%, rgba(255,43,214,.25), transparent 60%),
-      linear-gradient(90deg, rgba(7,4,15,.88) 0%, rgba(7,4,15,.55) 45%, rgba(7,4,15,0) 70%); justify-content: flex-start; }
+  #menu { background: radial-gradient(ellipse at 50% 120%, rgba(225,6,0,.25), transparent 60%),
+      linear-gradient(90deg, rgba(11,11,15,.88) 0%, rgba(11,11,15,.55) 45%, rgba(11,11,15,0) 70%); justify-content: flex-start; }
   .menu-card { width: min(440px, 100%); max-height: 100%; overflow-y: auto; padding: 28px 28px 24px; margin-left: clamp(0px, 5vw, 80px); }
   .title { margin: 0; font-size: clamp(40px, 8vw, 64px); line-height: .9; font-weight: 900; font-style: italic; letter-spacing: -1px;
-    background: linear-gradient(180deg, #fff 10%, #ffb3f0 50%, var(--pink) 90%); -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 0 18px rgba(255,43,214,.55)); }
-  .title span { display: block; background: linear-gradient(180deg, #e8fdff, var(--cyan)); -webkit-background-clip: text; background-clip: text;
-    filter: drop-shadow(0 0 14px rgba(34,224,255,.6)); }
+    background: linear-gradient(180deg, #fff 10%, #ffb0aa 50%, var(--pink) 90%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 18px rgba(225,6,0,.55)); }
+  .title span { display: block; background: linear-gradient(180deg, #ffffff, var(--cyan)); -webkit-background-clip: text; background-clip: text;
+    filter: drop-shadow(0 0 14px rgba(240,240,240,.6)); }
   .tag { margin: 10px 0 18px; color: var(--dim); font-size: 14px; letter-spacing: .5px; }
   .group { margin-bottom: 12px; }
   .label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--dim); margin-bottom: 8px; text-transform: uppercase; }
@@ -38,11 +38,11 @@
   .swatch[aria-pressed="true"] { border-color: #fff; transform: scale(1.12); box-shadow: 0 0 16px currentColor, inset 0 -6px 10px rgba(0,0,0,.35); }
   .seg { display: flex; gap: 6px; background: rgba(255,255,255,.06); padding: 4px; border-radius: 12px; border: 1px solid var(--line); }
   .seg button { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 9px 6px; border: 0; border-radius: 9px; background: transparent; font-weight: 700; font-size: 13px; color: var(--dim); }
-  .seg button[aria-pressed="true"] { background: linear-gradient(135deg, var(--pink), #8a3cff); color: #fff; box-shadow: 0 0 14px rgba(255,43,214,.45); }
+  .seg button[aria-pressed="true"] { background: linear-gradient(135deg, var(--pink), #8c0a06); color: #fff; box-shadow: 0 0 14px rgba(225,6,0,.45); }
   .cta { width: 100%; margin-top: 8px; padding: 16px; border: 0; border-radius: 14px; font-size: 20px; font-weight: 900; font-style: italic; letter-spacing: 2px;
-    background: linear-gradient(135deg, #ff2d6f, var(--pink) 50%, #8a3cff); color: #fff; box-shadow: 0 0 28px rgba(255,43,214,.55), inset 0 1px 0 rgba(255,255,255,.4);
+    background: linear-gradient(135deg, #ff3b30, var(--pink) 50%, #8c0a06); color: #fff; box-shadow: 0 0 28px rgba(225,6,0,.55), inset 0 1px 0 rgba(255,255,255,.4);
     transition: transform .12s, box-shadow .12s; }
-  .cta:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(255,43,214,.8), inset 0 1px 0 rgba(255,255,255,.4); }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(225,6,0,.8), inset 0 1px 0 rgba(255,255,255,.4); }
   .cta:active { transform: translateY(1px); }
   .btn2 { padding: 12px 18px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.07); font-weight: 700; font-size: 15px; }
   .btn2:hover { background: rgba(255,255,255,.14); }
@@ -54,18 +54,18 @@
   /* ---------- HUD ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
   .hud-tl { position: absolute; top: 16px; left: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .pos { font-size: 56px; font-weight: 900; font-style: italic; line-height: .9; text-shadow: 0 0 18px rgba(255,43,214,.8); }
+  .pos { font-size: 56px; font-weight: 900; font-style: italic; line-height: .9; text-shadow: 0 0 18px rgba(225,6,0,.8); }
   .pos small { font-size: 22px; color: var(--dim); }
   .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; font-weight: 800; font-size: 15px;
     letter-spacing: 1px; width: max-content; }
   .board { list-style: none; margin: 4px 0 0; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 170px;
     font-size: 13px; }
   .board li { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; }
-  .board li.me { background: rgba(255,43,214,.22); }
+  .board li.me { background: rgba(225,6,0,.22); }
   .board .dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 8px currentColor; background: currentColor; }
   .board .gap { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
   .hud-tr { position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-  .timer { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(34,224,255,.7); }
+  .timer { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 0 12px rgba(240,240,240,.7); }
   .laps-info { font-size: 12.5px; color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; line-height: 1.5; }
   #minimap { width: 170px; height: 170px; }
   #speedo { position: absolute; right: 12px; bottom: 12px; width: 210px; height: 210px; }
@@ -83,7 +83,7 @@
 
   /* ---------- Panels ---------- */
   .panel { width: min(460px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 26px;
-    background: rgba(14,7,32,.92); box-shadow: 0 0 60px rgba(255,43,214,.25); text-align: center; }
+    background: rgba(14,7,32,.92); box-shadow: 0 0 60px rgba(225,6,0,.25); text-align: center; }
   .panel h2 { margin: 0 0 6px; font-size: 40px; font-style: italic; font-weight: 900; text-shadow: 0 0 20px var(--pink); }
   .panel .sub { color: var(--dim); margin-bottom: 18px; }
   .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
@@ -91,7 +91,7 @@
   td, th { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; }
   th { font-size: 11px; letter-spacing: 1.5px; color: var(--dim); }
   td:last-child, th:last-child { text-align: right; }
-  tr.me td { color: #fff; background: rgba(255,43,214,.18); }
+  tr.me td { color: #fff; background: rgba(225,6,0,.18); }
 
   /* ---------- Touch controls ---------- */
   /* Buttons scale with screen width so the two clusters never meet, even on 320px phones. */
@@ -99,14 +99,14 @@
     --b: clamp(52px, 15.5vw, 78px); --big: calc(var(--b) * 1.15); --g: clamp(8px, 2.6vw, 14px);
     --m: max(12px, env(safe-area-inset-bottom)); }
   .tbtn { position: absolute; width: var(--b); height: var(--b); border-radius: 50%; border: 2px solid rgba(255,255,255,.28);
-    background: radial-gradient(circle at 50% 35%, rgba(60,40,90,.6), rgba(10,5,22,.7)); color: #fff;
+    background: radial-gradient(circle at 50% 35%, rgba(50,50,58,.6), rgba(10,10,14,.7)); color: #fff;
     font-size: calc(var(--b) * .36); font-weight: 900; display: flex; align-items: center; justify-content: center; touch-action: none;
     box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15); padding: 0; }
-  .tbtn.on { background: radial-gradient(circle, rgba(255,43,214,.85), rgba(140,30,160,.7)); border-color: #fff; transform: scale(.94); }
+  .tbtn.on { background: radial-gradient(circle, rgba(225,6,0,.85), rgba(140,10,6,.7)); border-color: #fff; transform: scale(.94); }
   #t-left  { left: var(--m); bottom: var(--m); }
   #t-right { left: calc(var(--m) + var(--b) + var(--g)); bottom: var(--m); }
   #t-gas   { right: var(--m); bottom: var(--m); width: var(--big); height: var(--big);
-    background: radial-gradient(circle at 50% 35%, rgba(34,224,255,.55), rgba(10,60,90,.6)); }
+    background: radial-gradient(circle at 50% 35%, rgba(240,240,240,.55), rgba(60,60,68,.6)); }
   #t-brake { right: calc(var(--m) + var(--big) + var(--g)); bottom: var(--m); }
   #t-nitro { right: calc(var(--m) + (var(--big) - var(--b)) / 2); bottom: calc(var(--m) + var(--big) + var(--g)); }
   #t-drift { right: calc(var(--m) + var(--big) + var(--g)); bottom: calc(var(--m) + var(--b) + var(--g)); font-size: calc(var(--b) * .2); letter-spacing: .5px; }
@@ -117,7 +117,7 @@
 
   @media (max-width: 700px) {
     .menu-card { margin: 0 auto; padding: 18px 4px; }
-    #menu { background: linear-gradient(180deg, rgba(7,4,15,.85), rgba(7,4,15,.6)); align-items: flex-start; }
+    #menu { background: linear-gradient(180deg, rgba(11,11,15,.85), rgba(11,11,15,.6)); align-items: flex-start; }
     .pos { font-size: 40px; } .board { display: none; }
     #minimap { width: 110px; height: 110px; }
     .timer { font-size: 22px; }
@@ -132,12 +132,17 @@
 <body>
 <canvas id="game" aria-label="Race view"></canvas>
 
-<div id="loading" class="overlay" style="background:#07040f;z-index:50"><div class="title" style="font-size:40px">NEON<span>VELOCITY</span></div></div>
+<div id="loading" class="overlay" style="background:#0b0b0f;z-index:50;flex-direction:column;gap:22px">
+  <div class="title" style="font-size:40px">NEON<span>VELOCITY</span></div>
+  <div style="width:min(260px,70vw);height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden">
+    <div id="load-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#f2f2f2,#e10600);transition:width .2s"></div>
+  </div>
+</div>
 
 <div id="menu" class="overlay hidden">
   <div class="menu-card">
     <h1 class="title">NEON<span>VELOCITY</span></h1>
-    <p class="tag">Sunset Grand Prix &middot; 4 cars &middot; drift to charge nitro</p>
+    <p class="tag">Grand Prix &middot; 4 cars &middot; drift to charge nitro</p>
     <div class="group">
       <div class="label">Paint</div>
       <div class="swatches" id="swatches"></div>
@@ -201,7 +206,7 @@
   <button class="tbtn" id="t-drift" data-k="handbrake" aria-label="Drift">DRIFT</button>
 </div>
 
-<div id="pause" class="overlay hidden" style="background:rgba(7,4,15,.55)">
+<div id="pause" class="overlay hidden" style="background:rgba(11,11,15,.55)">
   <div class="panel">
     <h2>PAUSED</h2>
     <div class="sub">Take a breather.</div>
@@ -216,7 +221,7 @@
   </div>
 </div>
 
-<div id="results" class="overlay hidden" style="background:rgba(7,4,15,.45)">
+<div id="results" class="overlay hidden" style="background:rgba(11,11,15,.45)">
   <div class="panel">
     <h2 id="res-title">1ST PLACE!</h2>
     <div class="sub" id="res-sub"></div>
@@ -228,7 +233,7 @@
   </div>
 </div>
 
-<div id="error" class="overlay hidden" style="background:#07040f;z-index:60">
+<div id="error" class="overlay hidden" style="background:#0b0b0f;z-index:60">
   <div class="panel"><h2>Oops</h2><div class="sub" id="error-msg">WebGL is not available in this browser.</div></div>
 </div>
 

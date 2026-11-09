@@ -21,13 +21,15 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
 };
 
-const COLORS = [0xff2d6f, 0xffd21f, 0x22e0ff, 0x9b5cff, 0xf4f4f8, 0x18ff9a];
+// real-world paint colours: racing red, silver, deep blue, pearl white, black, British green
+const COLORS = [0xc8102e, 0xb8bcc2, 0x1e3f8a, 0xeeeeea, 0x16171a, 0x1f4d2b];
 // phones and tablets start in the lighter graphics mode; computers in High
 const coarsePointer = matchMedia('(pointer: coarse)').matches;
 const settings = Object.assign({ color: COLORS[0], difficulty: 'normal', laps: 3, mode: 'race', quality: coarsePointer ? 'low' : 'high' },
   store.get('nv-settings', {}));
 if (params.get('quality')) settings.quality = params.get('quality');
 if (params.get('laps')) settings.laps = +params.get('laps');
+if (!COLORS.includes(settings.color)) settings.color = COLORS[0]; // saved colour from an older version
 let best = store.get('nv-best', {}); // { lap: seconds, ['race'+laps]: seconds }
 
 const fmt = (t) => {
@@ -77,7 +79,7 @@ scene.add(smoke.points, sparks.points, skids.mesh);
 // HDR target with 4x MSAA: removes the jagged "pixel" edges
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.6, 0.9);
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.18, 0.5, 0.95);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const grade = new ShaderPass(GradeShader);
@@ -92,7 +94,7 @@ function applyQuality() {
   const base = Math.min(high ? 2 : 1.5, window.devicePixelRatio || 1);
   renderer.setPixelRatio(Math.max(0.6, base * AUTO_SCALE[autoLevel]));
   bloom.enabled = autoLevel < 4;
-  bloom.strength = high ? 0.6 : 0.5;
+  bloom.strength = high ? 0.18 : 0.14; // daylight: just a hint of glare on highlights
   // MSAA is the costliest part on weak GPUs: 4x on High, off in Performance mode
   const samples = high && autoLevel < 2 ? 4 : 0;
   for (const rt of [composer.renderTarget1, composer.renderTarget2]) {
@@ -112,6 +114,7 @@ function applyQuality() {
  */
 const perf = { t: 0, n: 0, goodWindows: 0, floor: 0, lastDownFps: null, cooldown: 1.5 };
 function adaptQuality(realDt) {
+  if (params.has('noauto')) return; // fixed quality (screenshots / tests)
   if (realDt > 2 || document.hidden) return; // ignore app-switch pauses, not slow frames
   if (perf.cooldown > 0) { perf.cooldown -= realDt; return; }
   perf.t += realDt; perf.n++;
@@ -447,7 +450,7 @@ function carEffects(car, view, dt) {
         acc -= 1;
         const g = 0.42 + Math.random() * 0.16;
         smoke.emit(wx, 0.35, wz, (Math.random() - 0.5) * 2 + car.vx * 0.15, 0.8 + Math.random(), (Math.random() - 0.5) * 2 + car.vz * 0.15,
-          1.1 + Math.random() * 0.8, 1.1, g, g, g * 1.08);
+          1.1 + Math.random() * 0.8, 0.8, g, g, g * 1.02);
       }
     } else if (car.offroad && Math.abs(car.speed) > 6) {
       acc += dt * Math.min(30, Math.abs(car.speed));
@@ -629,6 +632,9 @@ window.__game = {
 // ---------------------------------------------------------------- boot
 applyQuality();
 syncMenu();
+// wait for the photo textures + HDR sky before showing the game
+world.onProgress((f) => { const b = $('load-bar'); if (b) b.style.width = Math.round(f * 100) + '%'; });
+await world.ready;
 // compile every shader up front (incl. nitro flames, hidden until used) so the
 // first nitro / first smoke never causes a hitch mid-race
 for (const v of carViews) for (const f of v.flames) f.visible = true;

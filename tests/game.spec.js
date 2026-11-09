@@ -54,10 +54,10 @@ test('boots, renders a lit 3D scene and shows the main menu', async ({ page }) =
 
 test('menu options are interactive and persist across reloads', async ({ page }) => {
   await boot(page);
-  const yellow = page.locator('.swatch[data-v="16765471"]'); // 0xffd21f
-  await yellow.click();
-  await expect(yellow).toHaveAttribute('aria-pressed', 'true');
-  expect((await state(page)).player.color).toBe(0xffd21f);
+  const silver = page.locator('.swatch[data-v="12106946"]'); // 0xb8bcc2
+  await silver.click();
+  await expect(silver).toHaveAttribute('aria-pressed', 'true');
+  expect((await state(page)).player.color).toBe(0xb8bcc2);
 
   await page.click('#difficulty button[data-v="hard"]');
   await page.click('#laps button[data-v="5"]');
@@ -66,7 +66,7 @@ test('menu options are interactive and persist across reloads', async ({ page })
 
   await page.reload();
   await page.waitForSelector('body[data-ready="1"]');
-  await expect(page.locator('.swatch[data-v="16765471"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.swatch[data-v="12106946"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#difficulty button[data-v="hard"]')).toHaveAttribute('aria-pressed', 'true');
 
   await page.click('#start-btn');

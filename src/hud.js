@@ -15,7 +15,7 @@ export class Speedometer {
     const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, max = 320;
     // backdrop
     g.beginPath(); g.arc(cx, cy, r + 14, 0, Math.PI * 2);
-    g.fillStyle = 'rgba(8,4,20,0.62)'; g.fill();
+    g.fillStyle = 'rgba(12,12,16,0.62)'; g.fill();
     // track
     g.lineCap = 'round';
     g.lineWidth = 10; g.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -23,8 +23,8 @@ export class Speedometer {
     // value arc
     const frac = Math.min(1, kmh / max);
     const grad = g.createLinearGradient(0, S, S, 0);
-    grad.addColorStop(0, '#22e0ff'); grad.addColorStop(0.6, '#ff2bd6'); grad.addColorStop(1, '#ff3355');
-    g.strokeStyle = grad; g.shadowColor = '#ff2bd6'; g.shadowBlur = 14;
+    grad.addColorStop(0, '#f2f2f2'); grad.addColorStop(0.6, '#ff8a00'); grad.addColorStop(1, '#e10600');
+    g.strokeStyle = grad; g.shadowColor = '#e10600'; g.shadowBlur = 14;
     g.beginPath(); g.arc(cx, cy, r, a0, a0 + (a1 - a0) * frac); g.stroke();
     g.shadowBlur = 0;
     // ticks
@@ -42,19 +42,19 @@ export class Speedometer {
     g.strokeStyle = '#fff'; g.lineWidth = 3; g.shadowColor = '#fff'; g.shadowBlur = 8;
     g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * (r - 8), cy + Math.sin(an) * (r - 8)); g.stroke();
     g.shadowBlur = 0;
-    g.beginPath(); g.arc(cx, cy, 6, 0, Math.PI * 2); g.fillStyle = '#ff2bd6'; g.fill();
+    g.beginPath(); g.arc(cx, cy, 6, 0, Math.PI * 2); g.fillStyle = '#e10600'; g.fill();
     // digital readout
     g.fillStyle = '#fff'; g.font = 'italic 800 34px system-ui, sans-serif';
     g.fillText(String(Math.round(kmh)), cx, cy + 34);
     g.font = '600 10px system-ui, sans-serif'; g.fillStyle = 'rgba(255,255,255,0.6)';
     g.fillText('KM/H', cx, cy + 56);
-    g.font = '800 16px system-ui, sans-serif'; g.fillStyle = '#22e0ff';
+    g.font = '800 16px system-ui, sans-serif'; g.fillStyle = '#f2f2f2';
     g.fillText(gear, cx, cy - 26);
     // nitro bar
     const bw = 96, bx = cx - bw / 2, by = S - 22;
     g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(bx, by, bw, 7);
-    g.fillStyle = nitroActive ? '#7fd8ff' : '#2f8cff';
-    g.shadowColor = '#2f8cff'; g.shadowBlur = nitroActive ? 16 : 6;
+    g.fillStyle = nitroActive ? '#ff6a5a' : '#e10600';
+    g.shadowColor = '#e10600'; g.shadowBlur = nitroActive ? 16 : 6;
     g.fillRect(bx, by, bw * nitro, 7);
     g.shadowBlur = 0;
     g.font = '700 9px system-ui, sans-serif'; g.fillStyle = 'rgba(255,255,255,0.7)';
@@ -84,7 +84,7 @@ export class Minimap {
   draw(cars) {
     const g = this.g, S = this.size, t = this.track;
     g.clearRect(0, 0, S, S);
-    g.fillStyle = 'rgba(8,4,20,0.55)';
+    g.fillStyle = 'rgba(12,12,16,0.55)';
     g.beginPath(); g.roundRect(0, 0, S, S, 14); g.fill();
     g.beginPath();
     for (let i = 0; i <= t.N; i += 4) {
@@ -93,7 +93,7 @@ export class Minimap {
     }
     g.closePath();
     g.lineJoin = 'round';
-    g.strokeStyle = 'rgba(255,43,214,0.35)'; g.lineWidth = 9; g.stroke();
+    g.strokeStyle = 'rgba(225,6,0,0.35)'; g.lineWidth = 9; g.stroke();
     g.strokeStyle = '#e9e4ff'; g.lineWidth = 3; g.stroke();
     const [sx, sy] = this.map(t.px[0], t.pz[0]);
     g.fillStyle = '#fff'; g.fillRect(sx - 6, sy - 1.5, 12, 3);

@@ -9,9 +9,9 @@ export const DIFFICULTY = {
 };
 
 const RIVALS = [
-  { name: 'VIPER', color: 0x22e0ff },
-  { name: 'BLAZE', color: 0xff8a1f },
-  { name: 'NOVA', color: 0x9dff3a },
+  { name: 'VIPER', color: 0x2a62c9 },
+  { name: 'BLAZE', color: 0xe26b1a },
+  { name: 'NOVA', color: 0xe6b800 },
 ];
 
 export const FIXED_DT = 1 / 120;
@@ -26,7 +26,7 @@ export class Race {
     this.events = [];
   }
 
-  setup({ laps = 3, difficulty = 'normal', mode = 'race', playerColor = 0xff2d6f, playerName = 'YOU' } = {}) {
+  setup({ laps = 3, difficulty = 'normal', mode = 'race', playerColor = 0xc8102e, playerName = 'YOU' } = {}) {
     this.laps = laps;
     this.mode = mode;
     this.difficulty = difficulty;

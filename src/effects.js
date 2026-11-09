@@ -29,7 +29,7 @@ export class Particles {
         varying float vA; varying vec3 vC; uniform float scale;
         void main(){ vC = color; vec4 mv = modelViewMatrix * vec4(position,1.);
           // fade out particles right in front of the lens and cap their on-screen size
-          vA = alpha * smoothstep(2.5, 9.0, -mv.z);
+          vA = alpha * smoothstep(2.5, 9.0, -mv.z) * 0.55;
           gl_PointSize = min(size * scale / max(0.1, -mv.z), scale * 0.18); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: `uniform sampler2D map; varying float vA; varying vec3 vC;
         void main(){ vec4 t = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vC, t.a * vA); if (gl_FragColor.a < 0.01) discard; }`,
@@ -67,7 +67,7 @@ export class Particles {
 export class SkidMarks {
   constructor(max = 1400) {
     this.max = max; this.cursor = 0;
-    const mat = new THREE.MeshBasicMaterial({ color: 0x050505, transparent: true, opacity: 0.55, depthWrite: false,
+    const mat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a, transparent: true, opacity: 0.3, depthWrite: false,
       polygonOffset: true, polygonOffsetFactor: -4 });
     this.mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.3, 1).rotateX(-Math.PI / 2), mat, max);
     this.mesh.frustumCulled = false;

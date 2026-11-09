@@ -345,6 +345,7 @@ export function buildCar(color) {
     transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
   const under = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 5.8), glowMat);
   under.rotation.x = -Math.PI / 2; under.position.y = 0.06;
+  under.visible = false; // realistic daylight style: no neon underglow
   car.add(under);
   const blob = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 5.2),
     new THREE.MeshBasicMaterial({ map: A.blob, transparent: true, depthWrite: false }));
